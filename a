@@ -1,0 +1,1135 @@
+GROQ_API_KEY=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
+GROQ_API_KEY=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
+
+import streamlit as st
+import os
+from groq import Groq
+from dotenv import load_dotenv
+import json
+import requests
+import pandas as pd
+import random
+import time
+from datetime import datetime
+
+# Load environment variables
+load_dotenv()
+
+# Initialize Groq client
+api_key = os.environ.get("GROQ_API_KEY")
+if not api_key:
+    st.error("❌ GROQ_API_KEY not found in .env file.")
+    st.stop()
+
+client = Groq(api_key=api_key)
+
+# API Keys
+UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
+
+# Set page config
+st.set_page_config(
+    page_title="🌍 AI Travel Itinerary Planner",
+    page_icon="✈️",
+    layout="wide"
+)
+
+# Enhanced CSS with modern styling
+st.markdown("""
+<style>
+    /* Main container */
+    .stApp {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    /* Enhanced Card styling */
+    .place-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: 25px;
+        margin: 20px 0;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .place-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        border-radius: 20px 20px 0 0;
+    }
+    
+    .place-card:hover {
+        transform: translateY(-8px) scale(1.02);
+        border-color: #3b82f6;
+        box-shadow: 0 20px 60px rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Image container */
+    .image-container {
+        width: 100%;
+        height: 220px;
+        border-radius: 16px;
+        overflow: hidden;
+        margin-bottom: 20px;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        position: relative;
+    }
+    
+    .image-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.6s ease;
+    }
+    
+    .image-container:hover img {
+        transform: scale(1.15);
+    }
+    
+    .image-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+        padding: 15px;
+        color: white;
+        font-size: 0.8rem;
+    }
+    
+    /* Badge styling */
+    .place-badge {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 25px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-bottom: 15px;
+        background: rgba(59, 130, 246, 0.15);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        backdrop-filter: blur(5px);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Rating stars */
+    .rating-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 15px 0;
+    }
+    
+    .stars {
+        color: #f59e0b;
+        font-size: 1rem;
+        text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+    }
+    
+    /* Time info */
+    .time-info {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .time-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #94a3b8;
+        font-size: 0.85rem;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 8px 12px;
+        border-radius: 12px;
+    }
+    
+    /* Day header */
+    .day-header {
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        padding: 20px 30px;
+        border-radius: 20px;
+        margin: 25px 0;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .day-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" opacity="0.1"><path d="M0,0 L100,0 L100,100 Z" fill="white"/></svg>');
+        background-size: cover;
+    }
+    
+    /* Section headers */
+    .section-title {
+        color: #f1f5f9;
+        font-size: 2rem;
+        font-weight: 800;
+        margin: 40px 0 25px 0;
+        padding-bottom: 15px;
+        border-bottom: 3px solid #3b82f6;
+        position: relative;
+        display: inline-block;
+    }
+    
+    .section-title::after {
+        content: '';
+        position: absolute;
+        bottom: -3px;
+        left: 0;
+        width: 60px;
+        height: 3px;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        border-radius: 3px;
+    }
+    
+    /* Stats cards */
+    .stat-card {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        padding: 25px;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: all 0.3s ease;
+        backdrop-filter: blur(5px);
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        border-color: #3b82f6;
+        box-shadow: 0 10px 30px rgba(59, 130, 246, 0.2);
+    }
+    
+    .stat-icon {
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+        display: inline-block;
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #60a5fa;
+        margin: 10px 0;
+        background: linear-gradient(90deg, #60a5fa, #8b5cf6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .stat-label {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Schedule cards */
+    .schedule-card {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        padding: 25px;
+        border-left: 5px solid;
+        margin: 15px 0;
+        backdrop-filter: blur(5px);
+        transition: all 0.3s ease;
+    }
+    
+    .schedule-card:hover {
+        transform: translateX(5px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+    
+    .morning-card {
+        border-left-color: #f59e0b;
+    }
+    
+    .afternoon-card {
+        border-left-color: #10b981;
+    }
+    
+    .evening-card {
+        border-left-color: #8b5cf6;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        border-radius: 12px;
+        padding: 12px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        border: none;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(30, 41, 59, 0.5);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #2563eb, #7c3aed);
+    }
+    
+    /* Gradient text */
+    .gradient-text {
+        background: linear-gradient(90deg, #60a5fa, #8b5cf6, #ec4899);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 800;
+    }
+    
+    /* Tag styling */
+    .place-tag {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 15px;
+        font-size: 0.75rem;
+        background: rgba(255, 255, 255, 0.1);
+        color: #94a3b8;
+        margin: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* Map container */
+    .map-container {
+        border-radius: 20px;
+        overflow: hidden;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        margin: 20px 0;
+    }
+    
+    /* Loading animation */
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .loading {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    
+    /* Attraction card */
+    .attraction-card {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 20px;
+        padding: 20px;
+        margin: 15px 0;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        transition: all 0.3s ease;
+    }
+    
+    .attraction-card:hover {
+        transform: translateY(-5px);
+        border-color: #3b82f6;
+        box-shadow: 0 15px 40px rgba(59, 130, 246, 0.2);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Initialize session state
+if 'itinerary' not in st.session_state:
+    st.session_state.itinerary = None
+if 'email_text' not in st.session_state:
+    st.session_state.email_text = ""
+if 'image_cache' not in st.session_state:
+    st.session_state.image_cache = {}
+
+# Function to extract travel info from email
+def extract_travel_info(email_content):
+    """Extract country, days, budget from email using Groq"""
+    prompt = f"""
+    Extract travel information from this email:
+    "{email_content}"
+    
+    Return ONLY JSON with this exact structure:
+    {{
+        "country": "country name",
+        "days": number of days,
+        "budget": "budget amount",
+        "travelers": number of travelers,
+        "cities": ["city1", "city2", ...]
+    }}
+    
+    If information is missing, use reasonable defaults.
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "Extract travel information accurately. Use 'Not specified' if information is missing."},
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.1,
+            max_tokens=500,
+            response_format={"type": "json_object"}
+        )
+        
+        result = response.choices[0].message.content.strip()
+        
+        # Clean JSON
+        if result.startswith("```json"):
+            result = result[7:-3]
+        elif result.startswith("```"):
+            result = result[3:-3]
+        
+        return json.loads(result)
+    except Exception as e:
+        st.error(f"Error extracting travel info: {str(e)}")
+        return {"country": "Not specified", "days": 7, "budget": "Not specified", "travelers": 2, "cities": []}
+
+# Function to get places in country using Groq
+def get_places_in_country(country, cities):
+    """Get tourist places in the country using Groq"""
+    prompt = f"""
+    For {country}, list popular tourist attractions/places.
+    Cities mentioned: {', '.join(cities) if cities else 'Not specified'}
+    
+    Return JSON array of places with this structure:
+    [
+        {{
+            "name": "place name",
+            "city": "city where it's located",
+            "type": "type (Temple, Museum, Beach, etc.)",
+            "description": "brief description",
+            "rating": 4.5,
+            "best_time": "best time to visit",
+            "icon": "appropriate emoji"
+        }}
+    ]
+    
+    List 10-15 popular places. Make them real, famous tourist spots.
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "List real, popular tourist attractions for the given country. Include appropriate emoji icons."},
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.3,
+            max_tokens=1000,
+            response_format={"type": "json_object"}
+        )
+        
+        result = response.choices[0].message.content.strip()
+        
+        # Clean JSON
+        if result.startswith("```json"):
+            result = result[7:-3]
+        elif result.startswith("```"):
+            result = result[3:-3]
+        
+        data = json.loads(result)
+        
+        # Handle different possible response formats
+        if isinstance(data, dict) and "places" in data:
+            places = data["places"]
+        elif isinstance(data, list):
+            places = data
+        else:
+            # Try to extract array from any key
+            places = []
+            for key in data:
+                if isinstance(data[key], list):
+                    places = data[key]
+                    break
+        
+        # Ensure each place has an icon
+        icon_map = {
+            "Temple": "🛕", "Museum": "🏛️", "Beach": "🏖️", "Park": "🏞️", 
+            "Palace": "🏰", "Fort": "🏯", "Castle": "🏰", "Church": "⛪",
+            "Mosque": "🕌", "Market": "🛍️", "Mountain": "⛰️", "Lake": "🌊",
+            "Waterfall": "🌊", "Garden": "🌿", "Zoo": "🐅", "Aquarium": "🐠",
+            "Observation": "🗼", "Bridge": "🌉", "Square": "🟨", "Statue": "🗽",
+            "Monument": "🗽", "Archaeological": "🏺", "Historical": "🏛️",
+            "Cultural": "🎭", "Nature": "🌲", "Wildlife": "🐘", "Adventure": "🏄",
+            "Shopping": "🛒", "Entertainment": "🎢", "Food": "🍽️", "Wine": "🍷"
+        }
+        
+        for place in places:
+            place_type = place.get("type", "").lower()
+            icon = "📍"
+            for key, emoji in icon_map.items():
+                if key.lower() in place_type:
+                    icon = emoji
+                    break
+            place["icon"] = icon
+        
+        return places
+    except Exception as e:
+        st.warning(f"Could not fetch places: {str(e)}")
+        return []
+
+# Function to generate itinerary using Groq
+def generate_itinerary(country, days, budget, travelers, places):
+    """Generate complete itinerary using Groq"""
+    prompt = f"""
+    Create a {days}-day travel itinerary for {country}.
+    
+    Travel details:
+    - Budget: {budget}
+    - Travelers: {travelers}
+    - Available places: {json.dumps(places[:20], indent=2)}
+    
+    Create a detailed day-by-day itinerary. Include:
+    1. Day title and overview
+    2. Morning, afternoon, evening activities (use the places listed)
+    3. Accommodation suggestions
+    4. Food recommendations
+    5. Transportation tips
+    
+    Return JSON with this structure:
+    {{
+        "trip_summary": {{
+            "country": "{country}",
+            "days": {days},
+            "budget": "{budget}",
+            "travelers": {travelers},
+            "title": "creative trip title",
+            "theme": "trip theme",
+            "best_time": "best time to visit",
+            "currency": "local currency",
+            "language": "local language",
+            "time_zone": "time zone"
+        }},
+        "daily_itinerary": [
+            {{
+                "day": 1,
+                "title": "Day title",
+                "overview": "Day overview",
+                "morning": {{
+                    "time": "9:00 AM - 12:00 PM",
+                    "activity": "activity description",
+                    "description": "detailed description",
+                    "tips": "useful tips"
+                }},
+                "afternoon": {{...}},
+                "evening": {{...}},
+                "accommodation": "suggested accommodation",
+                "food": ["food recommendation 1", "food recommendation 2"]
+            }}
+        ],
+        "key_places": [
+            {{
+                "name": "place name",
+                "city": "city location",
+                "type": "place type",
+                "description": "why it's important",
+                "best_time": "best time to visit",
+                "tips": "visitor tips",
+                "icon": "appropriate emoji"
+            }}
+        ]
+    }}
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "Create a practical, detailed travel itinerary using the provided places."},
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.4,
+            max_tokens=4000,
+            response_format={"type": "json_object"}
+        )
+        
+        result = response.choices[0].message.content.strip()
+        
+        # Clean JSON
+        if result.startswith("```json"):
+            result = result[7:-3]
+        elif result.startswith("```"):
+            result = result[3:-3]
+        
+        return json.loads(result)
+    except Exception as e:
+        st.error(f"Error generating itinerary: {str(e)}")
+        return None
+
+# FIXED: Function to get REAL images from multiple sources
+def get_place_image(place_name, country, city=""):
+    """Get high-quality image for a place from multiple sources"""
+    cache_key = f"{place_name}_{country}"
+    
+    # Check cache first
+    if cache_key in st.session_state.image_cache:
+        return st.session_state.image_cache[cache_key]
+    
+    search_queries = [
+        f"{place_name} {country} tourism landmark",
+        f"{place_name} {country} travel",
+        f"{place_name} {city} {country} tourist attraction",
+        f"{place_name}",
+        f"{country} tourism {place_name.split()[0]}"
+    ]
+    
+    # Try Unsplash first
+    if UNSPLASH_ACCESS_KEY:
+        try:
+            for query in search_queries:
+                url = "https://api.unsplash.com/search/photos"
+                headers = {"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"}
+                params = {
+                    "query": query,
+                    "per_page": 1,
+                    "orientation": "landscape",
+                    "content_filter": "high"
+                }
+                
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("results") and len(data["results"]) > 0:
+                        photo = data["results"][0]
+                        result = {
+                            "url": photo["urls"]["regular"],
+                            "photographer": photo["user"]["name"],
+                            "photographer_url": photo["user"]["links"]["html"],
+                            "alt": photo.get("alt_description", f"{place_name} in {country}"),
+                            "source": "Unsplash"
+                        }
+                        st.session_state.image_cache[cache_key] = result
+                        return result
+        except:
+            pass
+    
+    # Try Pexels
+    if PEXELS_API_KEY:
+        try:
+            for query in search_queries:
+                headers = {"Authorization": PEXELS_API_KEY}
+                url = "https://api.pexels.com/v1/search"
+                params = {
+                    "query": query,
+                    "per_page": 1,
+                    "orientation": "landscape"
+                }
+                
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("photos") and len(data["photos"]) > 0:
+                        photo = data["photos"][0]
+                        result = {
+                            "url": photo["src"]["large"],
+                            "photographer": photo["photographer"],
+                            "photographer_url": photo["photographer_url"],
+                            "alt": photo.get("alt", f"{place_name} in {country}"),
+                            "source": "Pexels"
+                        }
+                        st.session_state.image_cache[cache_key] = result
+                        return result
+        except:
+            pass
+    
+    # Try Wikimedia Commons for famous places
+    try:
+        clean_name = place_name.replace(" ", "_")
+        wiki_url = "https://en.wikipedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "format": "json",
+            "prop": "pageimages",
+            "piprop": "original",
+            "titles": clean_name
+        }
+        
+        response = requests.get(wiki_url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            pages = data.get("query", {}).get("pages", {})
+            for page in pages.values():
+                if "original" in page:
+                    result = {
+                        "url": page["original"]["source"],
+                        "photographer": "Wikimedia Commons",
+                        "photographer_url": "https://commons.wikimedia.org",
+                        "alt": f"{place_name}",
+                        "source": "Wikimedia"
+                    }
+                    st.session_state.image_cache[cache_key] = result
+                    return result
+    except:
+        pass
+    
+    return None
+
+# App Header
+st.markdown("""
+<div style="text-align: center; padding: 30px 0;">
+    <h1 class="gradient-text" style="font-size: 3.5rem; margin-bottom: 15px;">AI Travel Itinerary Planner</h1>
+    <p style="color: #94a3b8; font-size: 1.2rem; max-width: 800px; margin: 0 auto;">
+        Describe your travel plans → AI finds places → Creates itinerary → Shows real images
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# Main input area
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.markdown("### Your Travel Plans")
+    email_text = st.text_area(
+        "Describe your trip:",
+        value=st.session_state.email_text,
+        height=250,
+        placeholder="""Example: Planning a 10-day trip to Sri Lanka with my family.
+We want to visit Colombo, Kandy, and Galle.
+Budget: $3500 for 4 people.
+Interested in: Temples, beaches, wildlife, cultural experiences.
+Travel dates: December 15-25, 2024.
+We prefer comfortable hotels and good local food."""
+    )
+
+with col2:
+    st.markdown("### Quick Templates")
+    
+    if st.button("Sri Lanka Trip", use_container_width=True):
+        st.session_state.email_text = """Planning a 12-day trip to Sri Lanka.
+Destinations: Colombo, Kandy, Sigiriya, Galle, Bentota
+Travelers: 2 adults
+Budget: $4000
+Interests: Culture, history, beaches, wildlife, tea plantations
+Dates: December 2024
+Want to see UNESCO sites, tea plantations, beaches, and experience local culture."""
+        st.rerun()
+    
+    if st.button("Japan Tour", use_container_width=True):
+        st.session_state.email_text = """Planning a 10-day trip to Japan.
+Cities: Tokyo, Kyoto, Osaka
+Travelers: 2 adults
+Budget: $5000
+Interests: Culture, food, temples, technology
+Dates: Spring 2025
+Want to experience both traditional and modern Japan."""
+        st.rerun()
+    
+    if st.button("Thailand Adventure", use_container_width=True):
+        st.session_state.email_text = """Planning a 14-day Thailand trip.
+Cities: Bangkok, Chiang Mai, Phuket
+Travelers: Young couple
+Budget: $3000
+Interests: Beaches, culture, adventure, food
+Dates: November 2025
+Want: Temples, elephant sanctuary, island hopping, street food."""
+        st.rerun()
+
+# Generate button
+st.markdown("---")
+col_btn1, col_btn2 = st.columns([3, 1])
+with col_btn1:
+    generate_clicked = st.button(
+        "Generate My Itinerary",
+        type="primary",
+        use_container_width=True
+    )
+
+# Generate itinerary
+if generate_clicked and email_text.strip():
+    with st.spinner("Analyzing your travel plans..."):
+        # Step 1: Extract info from email
+        travel_info = extract_travel_info(email_text)
+        country = travel_info.get("country", "Not specified")
+        days = travel_info.get("days", 7)
+        budget = travel_info.get("budget", "Not specified")
+        travelers = travel_info.get("travelers", 2)
+        cities = travel_info.get("cities", [])
+        
+        st.info(f"Detected: {days}-day trip to {country}, Budget: {budget}, Travelers: {travelers}")
+    
+    with st.spinner(f"Finding tourist places in {country}..."):
+        # Step 2: Get places in country
+        places = get_places_in_country(country, cities)
+        
+        if places:
+            st.success(f"Found {len(places)} tourist places in {country}")
+    
+    with st.spinner("Creating your itinerary..."):
+        # Step 3: Generate itinerary
+        itinerary = generate_itinerary(country, days, budget, travelers, places)
+        
+        if itinerary:
+            st.session_state.itinerary = itinerary
+            st.success("Itinerary created successfully!")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.error("Failed to create itinerary")
+
+# Display itinerary if available
+if st.session_state.itinerary:
+    itinerary = st.session_state.itinerary
+    summary = itinerary.get("trip_summary", {})
+    
+    country = summary.get("country", "")
+    days = summary.get("days", 0)
+    budget = summary.get("budget", "")
+    travelers = summary.get("travelers", 2)
+    title = summary.get("title", "")
+    theme = summary.get("theme", "")
+    
+    # Display trip summary with beautiful UI
+    st.markdown("---")
+    # FIXED: Use separate HTML variable
+    header_html = f"""
+    <div style="text-align: center; margin-bottom: 40px; padding: 30px; background: rgba(255, 255, 255, 0.03); border-radius: 25px; border: 1px solid rgba(255, 255, 255, 0.1);">
+        <h1 class="gradient-text" style="font-size: 2.8rem; margin-bottom: 15px;">
+            {title}
+        </h1>
+        <p style="color: #94a3b8; font-size: 1.3rem; margin-bottom: 5px;">
+            {country} • {days} Days • {travelers} Travelers
+        </p>
+        <p style="color: #10b981; font-size: 1.1rem; font-weight: 600;">
+            {theme} • Budget: {budget}
+        </p>
+    </div>
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
+    
+    # Enhanced Stats Cards
+    col_stats = st.columns(4)
+    
+    stats_data = [
+        ("Destinations", country),
+        ("Duration", f"{days} Days"),
+        ("Travelers", str(travelers)),
+        ("Budget", budget)
+    ]
+    
+    for idx, (label, value) in enumerate(stats_data):
+        with col_stats[idx]:
+            st.markdown(f"""
+            <div class="stat-card">
+                <div class="stat-number">{value}</div>
+                <div class="stat-label">{label}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Additional Info Cards
+    st.markdown('<div class="section-title">Destination Information</div>', unsafe_allow_html=True)
+    
+    info_cols = st.columns(3)
+    
+    info_items = [
+        ("Currency", summary.get('currency', 'Check locally')),
+        ("Language", summary.get('language', 'Check locally')),
+        ("Time Zone", summary.get('time_zone', 'Check locally'))
+    ]
+    
+    for idx, (label, value) in enumerate(info_items):
+        with info_cols[idx]:
+            st.markdown(f"""
+            <div style="background: rgba(255, 255, 255, 0.05); border-radius: 15px; padding: 20px; text-align: center;">
+                <div style="color: #f1f5f9; font-weight: 600; margin-bottom: 5px; font-size: 1.2rem;">{label}</div>
+                <div style="color: #94a3b8; font-size: 1rem;">{value}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Key places with REAL images
+    key_places = itinerary.get("key_places", [])
+    if key_places:
+        st.markdown('<div class="section-title">Must-Visit Attractions</div>', unsafe_allow_html=True)
+        
+        # Display in beautiful cards with images
+        num_cols = 3
+        cols = st.columns(num_cols)
+        
+        for idx, place in enumerate(key_places[:9]):
+            with cols[idx % num_cols]:
+                # Get REAL image
+                image_data = get_place_image(place["name"], country, place.get("city", ""))
+                
+                # Create beautiful card
+                with st.container():
+                    # Start the card HTML
+                    card_html = f"""
+                    <div class="attraction-card">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                            <span style="font-size: 1.5rem;">{place.get('icon', '📍')}</span>
+                            <h3 style="color: #f1f5f9; margin: 0;">{place['name']}</h3>
+                        </div>
+                        
+                        <div class="place-badge">{place.get('type', 'Attraction')}</div>
+                        
+                        <div class="rating-container">
+                            <span class="stars">{"⭐" * 4}½</span>
+                            <span style="color: #f59e0b; font-weight: bold;">4.5/5</span>
+                        </div>
+                    """
+                    
+                    st.markdown(card_html, unsafe_allow_html=True)
+                    
+                    # Display image if available
+                    if image_data:
+                        image_html = f"""
+                        <div class="image-container">
+                            <img src="{image_data['url']}" alt="{image_data.get('alt', place['name'])}">
+                            <div class="image-overlay">
+                                Photo by {image_data['photographer']}
+                            </div>
+                        </div>
+                        """
+                        st.markdown(image_html, unsafe_allow_html=True)
+                    else:
+                        st.info(f"Searching for images of {place['name']}...")
+                    
+                    # Add description and details
+                    details_html = f"""
+                        <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.6;">
+                            {place.get('description', '')}
+                        </p>
+                        
+                        <div class="time-info">
+                            <div class="time-item">
+                                <span>Best time: {place.get('best_time', 'Best time to visit')}</span>
+                            </div>
+                            <div class="time-item">
+                                <span>Location: {place.get('city', country)}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 15px;">
+                            <strong style="color: #f1f5f9;">Tips:</strong>
+                            <p style="color: #94a3b8; font-size: 0.85rem;">{place.get('tips', 'Enjoy your visit!')}</p>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(details_html, unsafe_allow_html=True)
+    
+    # Daily itinerary
+    daily_itinerary = itinerary.get("daily_itinerary", [])
+    if daily_itinerary:
+        st.markdown('<div class="section-title">Daily Itinerary</div>', unsafe_allow_html=True)
+        
+        for day in daily_itinerary:
+            day_num = day.get("day", 1)
+            day_title = day.get("title", "")
+            day_overview = day.get("overview", "")
+            
+            # Beautiful day header
+            st.markdown(f"""
+            <div class="day-header">
+                <h2 style="color: white; margin: 0; font-size: 1.8rem;">Day {day_num}: {day_title}</h2>
+                <p style="color: rgba(255, 255, 255, 0.8); margin: 10px 0 0 0; font-size: 1rem;">{day_overview}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Schedule cards in columns
+            col_sched = st.columns(3)
+            
+            # Morning card
+            with col_sched[0]:
+                morning = day.get("morning", {})
+                if morning:
+                    tips_html = f'<div style="background: rgba(245, 158, 11, 0.05); padding: 12px; border-radius: 10px; border-left: 3px solid #f59e0b; margin-top: 15px;"><strong style="color: #f59e0b;">Tip:</strong><p style="color: #94a3b8; margin: 5px 0 0 0; font-size: 0.85rem;">{morning.get("tips", "")}</p></div>' if morning.get('tips') else ''
+                    st.markdown(f"""
+                    <div class="schedule-card morning-card">
+                        <h3 style="color: #f1f5f9; margin: 0 0 15px 0;">Morning</h3>
+                        <div style="background: rgba(245, 158, 11, 0.1); padding: 10px; border-radius: 10px; margin-bottom: 15px;">
+                            <span style="color: #f59e0b; font-weight: bold;">{morning.get('time', '9:00 AM - 12:00 PM')}</span>
+                        </div>
+                        <h4 style="color: #f1f5f9; margin: 10px 0;">{morning.get('activity', 'Activity')}</h4>
+                        <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.6;">{morning.get('description', '')}</p>
+                        {tips_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Afternoon card
+            with col_sched[1]:
+                afternoon = day.get("afternoon", {})
+                if afternoon:
+                    tips_html = f'<div style="background: rgba(16, 185, 129, 0.05); padding: 12px; border-radius: 10px; border-left: 3px solid #10b981; margin-top: 15px;"><strong style="color: #10b981;">Tip:</strong><p style="color: #94a3b8; margin: 5px 0 0 0; font-size: 0.85rem;">{afternoon.get("tips", "")}</p></div>' if afternoon.get('tips') else ''
+                    st.markdown(f"""
+                    <div class="schedule-card afternoon-card">
+                        <h3 style="color: #f1f5f9; margin: 0 0 15px 0;">Afternoon</h3>
+                        <div style="background: rgba(16, 185, 129, 0.1); padding: 10px; border-radius: 10px; margin-bottom: 15px;">
+                            <span style="color: #10b981; font-weight: bold;">{afternoon.get('time', '1:00 PM - 5:00 PM')}</span>
+                        </div>
+                        <h4 style="color: #f1f5f9; margin: 10px 0;">{afternoon.get('activity', 'Activity')}</h4>
+                        <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.6;">{afternoon.get('description', '')}</p>
+                        {tips_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Evening card
+            with col_sched[2]:
+                evening = day.get("evening", {})
+                if evening:
+                    tips_html = f'<div style="background: rgba(139, 92, 246, 0.05); padding: 12px; border-radius: 10px; border-left: 3px solid #8b5cf6; margin-top: 15px;"><strong style="color: #8b5cf6;">Tip:</strong><p style="color: #94a3b8; margin: 5px 0 0 0; font-size: 0.85rem;">{evening.get("tips", "")}</p></div>' if evening.get('tips') else ''
+                    st.markdown(f"""
+                    <div class="schedule-card evening-card">
+                        <h3 style="color: #f1f5f9; margin: 0 0 15px 0;">Evening</h3>
+                        <div style="background: rgba(139, 92, 246, 0.1); padding: 10px; border-radius: 10px; margin-bottom: 15px;">
+                            <span style="color: #8b5cf6; font-weight: bold;">{evening.get('time', '6:00 PM - 10:00 PM')}</span>
+                        </div>
+                        <h4 style="color: #f1f5f9; margin: 10px 0;">{evening.get('activity', 'Activity')}</h4>
+                        <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.6;">{evening.get('description', '')}</p>
+                        {tips_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Accommodation and Food Recommendations
+            col_details = st.columns(2)
+            
+            with col_details[0]:
+                if day.get("accommodation"):
+                    st.markdown(f"""
+                    <div style="background: rgba(255, 255, 255, 0.03); border-radius: 15px; padding: 20px; margin-top: 20px;">
+                        <h4 style="color: #f1f5f9; margin: 0 0 15px 0;">Accommodation</h4>
+                        <p style="color: #94a3b8; font-size: 0.95rem; line-height: 1.6;">{day['accommodation']}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col_details[1]:
+                if day.get("food"):
+                    st.markdown("""
+                    <div style="background: rgba(255, 255, 255, 0.03); border-radius: 15px; padding: 20px; margin-top: 20px;">
+                        <h4 style="color: #f1f5f9; margin: 0 0 15px 0;">Food Recommendations</h4>
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                    """, unsafe_allow_html=True)
+                    
+                    for food in day["food"][:3]:
+                        st.markdown(f"""
+                        <div style="background: rgba(248, 113, 113, 0.1); padding: 10px 15px; border-radius: 20px; border: 1px solid rgba(248, 113, 113, 0.2);">
+                            <span style="color: #f1f5f9; font-size: 0.9rem;">{food}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    st.markdown("</div></div>", unsafe_allow_html=True)
+            
+            st.markdown("<div style='margin: 40px 0;'></div>", unsafe_allow_html=True)
+    
+    # Export Section
+    st.markdown('<div class="section-title">Export Your Itinerary</div>', unsafe_allow_html=True)
+    
+    export_cols = st.columns(3)
+    
+    with export_cols[0]:
+        # JSON download
+        json_data = json.dumps(itinerary, indent=2, ensure_ascii=False)
+        st.download_button(
+            label="Download as JSON",
+            data=json_data,
+            file_name=f"itinerary_{country}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    with export_cols[1]:
+        # Text download
+        text_content = f"""
+{'='*60}
+{title}
+{'='*60}
+Country: {country}
+Duration: {days} days
+Travelers: {travelers}
+Budget: {budget}
+Theme: {theme}
+
+KEY PLACES:
+{'='*60}
+"""
+        for place in key_places[:5]:
+            text_content += f"""
+{place['name']}
+Description: {place.get('description', '')}
+Best time: {place.get('best_time', '')}
+Tips: {place.get('tips', '')}
+{'-'*40}
+"""
+        
+        text_content += f"""
+DAILY ITINERARY:
+{'='*60}
+"""
+        for day in daily_itinerary:
+            text_content += f"""
+Day {day['day']}: {day['title']}
+{day['overview']}
+
+Morning ({day.get('morning', {}).get('time', '')}):
+{day.get('morning', {}).get('activity', '')}
+{day.get('morning', {}).get('description', '')}
+
+Afternoon ({day.get('afternoon', {}).get('time', '')}):
+{day.get('afternoon', {}).get('activity', '')}
+{day.get('afternoon', {}).get('description', '')}
+
+Evening ({day.get('evening', {}).get('time', '')}):
+{day.get('evening', {}).get('activity', '')}
+{day.get('evening', {}).get('description', '')}
+
+Accommodation: {day.get('accommodation', '')}
+Food: {', '.join(day.get('food', []))}
+{'='*60}
+"""
+        
+        st.download_button(
+            label="Download as Text",
+            data=text_content,
+            file_name=f"itinerary_{country}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    
+    with export_cols[2]:
+        if st.button("Create New Itinerary", use_container_width=True):
+            st.session_state.itinerary = None
+            st.session_state.email_text = ""
+            st.session_state.image_cache = {}
+            st.rerun()
+
+# Footer
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #64748b; padding: 30px;">
+    <p style="margin: 5px 0; font-size: 0.9rem;">
+        <strong>Powered by:</strong> Groq AI • Unsplash API • Pexels API
+    </p>
+    <p style="margin: 5px 0; font-size: 0.8rem;">
+        AI Travel Itinerary Planner • Create your perfect trip with real images
+    </p>
+</div>
+""", unsafe_allow_html=True)

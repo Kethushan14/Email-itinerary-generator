@@ -1,0 +1,2804 @@
+import streamlit as st
+import os
+from groq import Groq
+from dotenv import load_dotenv
+import json
+import requests
+import pandas as pd
+import random
+import time
+from datetime import datetime, timedelta
+import plotly.express as px
+import plotly.graph_objects as go
+from geopy.geocoders import Nominatim
+import folium
+from streamlit_folium import folium_static
+
+# Charger les variables d'environnement
+load_dotenv()
+
+# Initialiser le client Groq
+api_key = os.environ.get("GROQ_API_KEY")
+if not api_key:
+    st.error("❌ GROQ_API_KEY introuvable dans le fichier .env.")
+    st.stop()
+client = Groq(api_key=api_key)
+
+# Clés API
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
+UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
+GOOGLE_PLACES_API_KEY = os.environ.get("GOOGLE_PLACES_API_KEY", "")
+OPENTRIPMAP_API_KEY = os.environ.get("OPENTRIPMAP_API_KEY", "")
+FOURSQUARE_API_KEY = os.environ.get("FOURSQUARE_API_KEY", "")
+
+# Configuration de la page
+st.set_page_config(
+    page_title="🌍 Assistant de Voyage AI Sri Lanka",
+    page_icon="🇱🇰",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# CSS amélioré avec Thème Blanc
+st.markdown("""
+<style>
+    /* Conteneur principal - Thème Blanc */
+    .stApp {
+        background: #ffffff;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    /* Arrière-plan du contenu principal */
+    .main .block-container {
+        background: #ffffff;
+    }
+    
+    /* En-tête de l'application avec transparence */
+.header-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 24px;
+    padding: 40px;
+    margin: 20px auto;
+    max-width: 1200px;
+    box-shadow: 
+        0 20px 60px rgba(0, 0, 0, 0.08),
+        0 8px 32px rgba(59, 130, 246, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.header-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 
+        0 30px 80px rgba(0, 0, 0, 0.12),
+        0 15px 40px rgba(59, 130, 246, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.92);
+}
+
+.header-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+    border-radius: 24px 24px 0 0;
+    z-index: 1;
+}
+
+.header-card::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 150%;
+    height: 150%;
+    background: radial-gradient(circle at center, 
+        rgba(59, 130, 246, 0.05) 0%,
+        rgba(139, 92, 246, 0.03) 25%,
+        rgba(236, 72, 153, 0.01) 50%,
+        transparent 70%);
+    transform: translate(-50%, -50%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.header-content {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+}
+
+.glow-effect {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    right: -50%;
+    bottom: -50%;
+    background: radial-gradient(circle at center, 
+        rgba(59, 130, 246, 0.08) 0%,
+        rgba(139, 92, 246, 0.04) 30%,
+        transparent 70%);
+    animation: gentlePulse 8s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+@keyframes gentlePulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.02); }
+}
+
+.gradient-text {
+    background: linear-gradient(135deg, 
+        #1e40af 0%,
+        #3b82f6 25%,
+        #8b5cf6 50%,
+        #ec4899 75%,
+        #f59e0b 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-fill-color: transparent;
+    background-size: 200% auto;
+    animation: gradientShift 8s ease-in-out infinite;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+@keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.header-subtitle {
+    color: #475569;
+    font-size: 1.2rem;
+    line-height: 1.6;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 20px;
+    position: relative;
+}
+
+.header-subtitle::before,
+.header-subtitle::after {
+    content: '✦';
+    position: absolute;
+    color: #3b82f6;
+    font-size: 1.5rem;
+    opacity: 0.6;
+    animation: subtleFloat 4s ease-in-out infinite;
+}
+
+.header-subtitle::before {
+    left: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    animation-delay: 0s;
+}
+
+.header-subtitle::after {
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    animation-delay: 2s;
+}
+
+@keyframes subtleFloat {
+    0%, 100% { transform: translateY(-50%) rotate(0deg); opacity: 0.4; }
+    50% { transform: translateY(-55%) rotate(180deg); opacity: 0.8; }
+}
+
+.header-icons {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 25px;
+    flex-wrap: wrap;
+}
+
+.header-icon {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 12px;
+    color: #1e40af;
+    font-size: 0.9rem;
+    font-weight: 500;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.header-icon:hover {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    transform: translateY(-2px);
+}
+
+/* Ajustements responsives */
+@media (max-width: 768px) {
+    .header-card {
+        padding: 30px 20px;
+        margin: 10px;
+        border-radius: 20px;
+    }
+    
+    .gradient-text {
+        font-size: 2.5rem;
+    }
+    
+    .header-subtitle {
+        font-size: 1.1rem;
+        padding: 0 10px;
+    }
+    
+    .header-icons {
+        gap: 10px;
+    }
+    
+    .header-icon {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .header-card {
+        padding: 25px 15px;
+        border-radius: 16px;
+    }
+    
+    .gradient-text {
+        font-size: 2rem;
+    }
+    
+    .header-subtitle {
+        font-size: 1rem;
+    }
+    
+    .header-icons {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .header-icon {
+        width: 100%;
+        max-width: 200px;
+        justify-content: center;
+    }
+}
+
+/* Effets spéciaux au survol */
+.header-card:hover .gradient-text {
+    animation-duration: 4s;
+}
+
+.header-card:hover .header-subtitle::before,
+.header-card:hover .header-subtitle::after {
+    animation-duration: 2s;
+}
+
+/* Améliorations pour le mode clair */
+.light-theme .header-card {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.light-theme .header-icon {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    color: #1e40af;
+}
+
+/* Support du mode sombre */
+.dark-theme .header-card {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dark-theme .header-subtitle {
+    color: #94a3b8;
+}
+
+.dark-theme .header-icon {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+}
+                   
+    /* ===============================
+   BARRE LATÉRALE (VERRE LUMINEUX)
+================================ */
+section[data-testid="stSidebar"] {
+    background: rgba(255,255,255,0.75) !important;
+    backdrop-filter: blur(14px);
+    border-right: 1px solid rgba(0,0,0,0.08);
+}
+    
+    /* Style amélioré des cartes - Thème Blanc */
+    .place-card {
+        background: #ffffff;
+        backdrop-filter: blur(10px);
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        padding: 25px;
+        margin: 20px 0;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .place-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        border-radius: 20px 20px 0 0;
+    }
+    
+    .place-card:hover {
+        transform: translateY(-8px) scale(1.02);
+        border-color: #3b82f6;
+        box-shadow: 0 20px 60px rgba(59, 130, 246, 0.15);
+    }
+    
+    /* Conteneur d'image */
+    .image-container {
+        width: 100%;
+        height: 220px;
+        border-radius: 16px;
+        overflow: hidden;
+        margin-bottom: 20px;
+        border: 2px solid #e2e8f0;
+        position: relative;
+    }
+    
+    .image-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.6s ease;
+    }
+    
+    .image-container:hover img {
+        transform: scale(1.15);
+    }
+    
+    .image-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+        padding: 15px;
+        color: white;
+        font-size: 0.8rem;
+    }
+    
+    /* Style des badges */
+    .place-badge {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 25px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-bottom: 15px;
+        background: rgba(59, 130, 246, 0.1);
+        color: #1e40af;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        backdrop-filter: blur(5px);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Étoiles de notation */
+    .rating-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 15px 0;
+    }
+    
+    .stars {
+        color: #f59e0b;
+        font-size: 1rem;
+        text-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+    }
+    
+    /* Info temps */
+    .time-info {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+    }
+    
+    .time-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #475569;
+        font-size: 0.85rem;
+        background: #f8fafc;
+        padding: 8px 12px;
+        border-radius: 12px;
+    }
+    
+    /* En-tête de jour */
+    .day-header {
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        padding: 20px 30px;
+        border-radius: 20px;
+        margin: 25px 0;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .day-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" opacity="0.1"><path d="M0,0 L100,0 L100,100 Z" fill="white"/></svg>');
+        background-size: cover;
+    }
+    
+    /* En-têtes de section */
+    .section-title {
+        color: #1e293b;
+        font-size: 2rem;
+        font-weight: 800;
+        margin: 40px 0 25px 0;
+        padding-bottom: 15px;
+        border-bottom: 3px solid #3b82f6;
+        position: relative;
+        display: inline-block;
+    }
+    
+    .section-title::after {
+        content: '';
+        position: absolute;
+        bottom: -3px;
+        left: 0;
+        width: 60px;
+        height: 3px;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        border-radius: 3px;
+    }
+    
+    /* Cartes de statistiques */
+    .stat-card {
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 25px;
+        text-align: center;
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(5px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        border-color: #3b82f6;
+        box-shadow: 0 10px 30px rgba(59, 130, 246, 0.1);
+    }
+    
+    .stat-icon {
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+        display: inline-block;
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #1e40af;
+        margin: 10px 0;
+        background: linear-gradient(90deg, #1e40af, #7c3aed);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .stat-label {
+        color: #475569;
+        font-size: 0.9rem;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Cartes d'emploi du temps */
+    .schedule-card {
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 25px;
+        border-left: 5px solid;
+        margin: 15px 0;
+        backdrop-filter: blur(5px);
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+    
+    .schedule-card:hover {
+        transform: translateX(5px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    }
+    
+    .morning-card {
+        border-left-color: #f59e0b;
+        background: linear-gradient(to right, #fff7ed, #ffffff);
+    }
+    
+    .afternoon-card {
+        border-left-color: #10b981;
+        background: linear-gradient(to right, #f0fdf4, #ffffff);
+    }
+    
+    .evening-card {
+        border-left-color: #8b5cf6;
+        background: linear-gradient(to right, #faf5ff, #ffffff);
+    }
+    
+    /* Style des boutons */
+    .stButton > button {
+        border-radius: 12px;
+        padding: 12px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        border: none;
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        color: white;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Barre de défilement personnalisée */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #2563eb, #7c3aed);
+    }
+    
+    /* Texte dégradé */
+    .gradient-text {
+        background: linear-gradient(90deg, #1e40af, #7c3aed, #be185d);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 800;
+    }
+    
+    /* Style des étiquettes */
+    .place-tag {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 15px;
+        font-size: 0.75rem;
+        background: #f1f5f9;
+        color: #475569;
+        margin: 3px;
+        border: 1px solid #e2e8f0;
+    }
+    
+    /* Conteneur de carte */
+    .map-container {
+        border-radius: 20px;
+        overflow: hidden;
+        border: 2px solid #e2e8f0;
+        margin: 20px 0;
+    }
+    
+    /* Animation de chargement */
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .loading {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    
+    /* Couleurs du texte pour le thème blanc */
+    h1, h2, h3, h4, h5, h6 {
+        color: #1e293b !important;
+    }
+    
+    p, span, div {
+        color: #334155 !important;
+    }
+    
+    /* Améliorations de la barre latérale */
+    .css-1d391kg {
+        border-right: 1px solid #e2e8f0;
+    }
+    
+    /* Champs de saisie */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stSelectbox > div > div > select {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        color: #1e293b;
+    }
+    
+    /* Cases à cocher et sélection */
+    .stCheckbox > label,
+    .stSelectbox > label {
+        color: #334155;
+    }
+    
+    /* Boîtes Markdown */
+    .stMarkdown {
+        color: #334155;
+    }
+    
+    /* Boîtes d'information, succès, avertissement, erreur */
+    .stAlert {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+    }
+    
+    /* Style des onglets */
+    .stTabs [data-baseweb="tab-list"] {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px;
+        padding: 10px 20px;
+    }
+    
+    /* Séparateur */
+    hr {
+        border-color: #e2e8f0;
+    }
+    
+    /* Infobulles */
+    .stTooltip {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        color: #334155;
+    }
+    
+    /* Conteneurs de métriques */
+    .stMetric {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+    }
+    
+    /* Barre de progression */
+    .stProgress > div > div > div {
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    }
+    
+    /* Éditeur de données */
+    .stDataFrame {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    
+    /* Messages de chat */
+    .stChatMessage {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+    }
+    
+    /* Développeur */
+    .streamlit-expanderHeader {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Initialiser l'état de session
+if 'itinerary' not in st.session_state:
+    st.session_state.itinerary = None
+if 'email_text' not in st.session_state:
+    st.session_state.email_text = ""
+if 'image_cache' not in st.session_state:
+    st.session_state.image_cache = {}
+if 'places_cache' not in st.session_state:
+    st.session_state.places_cache = {}
+if 'countries_data' not in st.session_state:
+    st.session_state.countries_data = {}
+
+# Fonction pour récupérer tous les pays depuis l'API REST Countries
+@st.cache_data(ttl=86400) # Cache pour 24 heures
+def get_all_countries():
+    """Récupérer tous les pays avec détails depuis l'API REST Countries"""
+    try:
+        response = requests.get("https://restcountries.com/v3.1/all", timeout=10)
+        if response.status_code == 200:
+            countries = response.json()
+            country_list = []
+          
+            for country in countries:
+                country_data = {
+                    "name": country.get("name", {}).get("common", "Inconnu"),
+                    "official_name": country.get("name", {}).get("official", ""),
+                    "capital": country.get("capital", ["N/A"])[0] if country.get("capital") else "N/A",
+                    "region": country.get("region", "N/A"),
+                    "subregion": country.get("subregion", "N/A"),
+                    "population": country.get("population", 0),
+                    "area": country.get("area", 0),
+                    "languages": list(country.get("languages", {}).values()) if country.get("languages") else [],
+                    "currencies": list(country.get("currencies", {}).keys()) if country.get("currencies") else [],
+                    "flag": country.get("flag", "🏳️"),
+                    "timezones": country.get("timezones", []),
+                    "borders": country.get("borders", []),
+                    "cca2": country.get("cca2", ""), # Code pays
+                    "latlng": country.get("latlng", [0, 0]) # Latitude, Longitude
+                }
+                country_list.append(country_data)
+          
+            # Trier par ordre alphabétique
+            country_list.sort(key=lambda x: x["name"])
+            return country_list
+    except Exception as e:
+        st.warning(f"Impossible de récupérer les pays : {str(e)}")
+        return []
+  
+    return []
+
+# Fonction pour récupérer des lieux réels depuis l'API OpenTripMap
+@st.cache_data(ttl=3600)
+def get_places_from_opentripmap(lat, lon, radius=10000, limit=20):
+    """Récupérer des attractions touristiques depuis l'API OpenTripMap"""
+    if not OPENTRIPMAP_API_KEY:
+        return []
+  
+    try:
+        url = "https://api.opentripmap.com/0.1/en/places/radius"
+        params = {
+            "radius": radius,
+            "lon": lon,
+            "lat": lat,
+            "format": "json",
+            "limit": limit,
+            "apikey": OPENTRIPMAP_API_KEY,
+            "kinds": "historic,architecture,cultural,museums,religion,beaches,natural" # Filtre pour attractions touristiques
+        }
+      
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            places = response.json()
+            detailed_places = []
+          
+            # Récupérer les détails pour chaque lieu
+            for place in places[:10]: # Limiter à 10 pour la performance
+                xid = place.get("xid")
+                if xid:
+                    details = get_place_details_from_opentripmap(xid)
+                    if details:
+                        detailed_places.append(details)
+          
+            return detailed_places
+    except Exception as e:
+        st.warning(f"Erreur API OpenTripMap : {str(e)}")
+  
+    return []
+
+def get_place_details_from_opentripmap(xid):
+    """Récupérer des informations détaillées sur un lieu spécifique"""
+    try:
+        url = f"https://api.opentripmap.com/0.1/en/places/xid/{xid}"
+        params = {"apikey": OPENTRIPMAP_API_KEY}
+      
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            place = response.json()
+          
+            # Extraire le type de lieu des catégories
+            kinds = place.get("kinds", "").split(",")
+            place_type = "Attraction"
+            if "historic" in kinds:
+                place_type = "Site Historique"
+            elif "museum" in kinds:
+                place_type = "Musée"
+            elif "religious" in kinds:
+                place_type = "Site Religieux"
+            elif "beach" in kinds:
+                place_type = "Plage"
+            elif "natural" in kinds:
+                place_type = "Naturel"
+            elif "architecture" in kinds:
+                place_type = "Architecture"
+          
+            return {
+                "name": place.get("name", "Lieu Inconnu"),
+                "type": place_type,
+                "description": place.get("wikipedia_extracts", {}).get("text", "Une attraction touristique populaire.")[:200] + "...",
+                "rating": round(random.uniform(3.5, 5.0), 1),
+                "coordinates": {
+                    "lat": place.get("point", {}).get("lat", 0),
+                    "lon": place.get("point", {}).get("lon", 0)
+                },
+                "wikipedia": place.get("wikipedia", "")
+            }
+    except:
+        pass
+  
+    return None
+
+# Fonction pour récupérer des lieux depuis l'API Foursquare
+@st.cache_data(ttl=3600)
+def get_places_from_foursquare(city, country, category="tourism"):
+    """Récupérer des lieux depuis l'API Foursquare"""
+    if not FOURSQUARE_API_KEY:
+        return []
+  
+    try:
+        url = "https://api.foursquare.com/v3/places/search"
+        headers = {
+            "Authorization": FOURSQUARE_API_KEY,
+            "accept": "application/json"
+        }
+      
+        query = f"{city}, {country}"
+        params = {
+            "query": "tourist attraction",
+            "near": query,
+            "limit": 15,
+            "categories": "16000" # Catégorie Voyage & Transport
+        }
+      
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            places = []
+          
+            for venue in data.get("results", []):
+                place = {
+                    "name": venue.get("name", "Inconnu"),
+                    "type": venue.get("categories", [{}])[0].get("name", "Attraction"),
+                    "rating": venue.get("rating", round(random.uniform(3.5, 5.0), 1)),
+                    "description": f"Une attraction populaire à {city}.",
+                    "coordinates": {
+                        "lat": venue.get("geocodes", {}).get("main", {}).get("latitude", 0),
+                        "lon": venue.get("geocodes", {}).get("main", {}).get("longitude", 0)
+                    }
+                }
+                places.append(place)
+          
+            return places
+    except Exception as e:
+        st.warning(f"Erreur API Foursquare : {str(e)}")
+  
+    return []
+
+# Fonction pour récupérer les coordonnées d'une ville
+@st.cache_data(ttl=86400)
+def get_city_coordinates(city, country):
+    """Récupérer la latitude et la longitude d'une ville"""
+    try:
+        geolocator = Nominatim(user_agent="travel_itinerary_app")
+        location = geolocator.geocode(f"{city}, {country}")
+        if location:
+            return location.latitude, location.longitude
+    except:
+        pass
+  
+    # Coordonnées de repli pour les villes du Sri Lanka
+    fallback_coords = {
+        "Colombo": (6.9271, 79.8612),
+        "Kandy": (7.2906, 80.6337),
+        "Galle": (6.0535, 80.2200),
+        "Negombo": (7.2090, 79.8367),
+        "Bentota": (6.4210, 79.9988),
+        "Hikkaduwa": (6.1390, 80.1038),
+        "Mirissa": (5.9455, 80.4583),
+        "Weligama": (5.9743, 80.4294),
+        "Tangalle": (6.0167, 80.7833),
+        "Nuwara Eliya": (6.9497, 80.7890),
+        "Ella": (6.8675, 81.0486),
+        "Badulla": (6.9895, 81.0557),
+        "Bandarawela": (6.8256, 80.9982),
+        "Hatton": (6.8917, 80.5958),
+        "Sigiriya": (7.9570, 80.7603),
+        "Dambulla": (7.8567, 80.6491),
+        "Polonnaruwa": (7.9403, 81.0188),
+        "Anuradhapura": (8.3114, 80.4037),
+        "Trincomalee": (8.5874, 81.2152),
+        "Batticaloa": (7.7167, 81.7000),
+        "Pasikudah": (7.9347, 81.5677),
+        "Arugam Bay": (6.8385, 81.8352),
+        "Jaffna": (9.6615, 80.0255),
+        "Mannar": (8.9814, 79.9044),
+        "Vavuniya": (8.7543, 80.4981),
+        "Yala": (6.3833, 81.5167),
+        "Udawalawe": (6.4435, 80.8747),
+        "Wilpattu": (8.4500, 80.0000),
+        "Kitulgala": (6.9894, 80.4175),
+        "Ratnapura": (6.6828, 80.3992),
+        "Kalutara": (6.5831, 79.9593),
+        "Beruwala": (6.4733, 79.9844),
+        "Chilaw": (7.5758, 79.7956),
+        "Puttalam": (8.0362, 79.8283),
+        "Matara": (5.9485, 80.5353),
+        "Hambantota": (6.1240, 81.1185),
+        "Ampara": (7.2833, 81.6667),
+        "Monaragala": (6.8728, 81.3506),
+        "Kurunegala": (7.4867, 80.3647),
+        "Kegalle": (7.2533, 80.3464),
+        "Matale": (7.4675, 80.6234),
+        "Nuwara Eliya": (6.9708, 80.7829)
+    }
+  
+    if city in fallback_coords:
+        return fallback_coords[city]
+  
+    # Retourner les coordonnées par défaut
+    return (7.8731, 80.7718) # Centre du Sri Lanka
+
+# Fonction pour récupérer des images réelles avec plusieurs sources
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_place_image(place_name, city, country, size="medium"):
+    """Récupérer une image de haute qualité pour un lieu réel depuis plusieurs sources"""
+    cache_key = f"{place_name}_{city}_{country}_{size}"
+  
+    # Vérifier le cache d'abord
+    if cache_key in st.session_state.image_cache:
+        return st.session_state.image_cache[cache_key]
+  
+    # Essayer Unsplash d'abord
+    if UNSPLASH_ACCESS_KEY:
+        try:
+            url = "https://api.unsplash.com/search/photos"
+            headers = {"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"}
+          
+            queries = [
+                f"{place_name} {city} {country} tourisme",
+                f"{place_name} monument",
+                f"{city} {place_name} attraction touristique",
+                f"{place_name} voyage",
+                place_name
+            ]
+          
+            for query in queries:
+                params = {
+                    "query": query,
+                    "per_page": 1,
+                    "orientation": "landscape",
+                    "content_filter": "high"
+                }
+              
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("results") and len(data["results"]) > 0:
+                        photo = data["results"][0]
+                        image_url = photo["urls"]["regular"] if size == "medium" else photo["urls"]["full"]
+                      
+                        result = {
+                            "url": image_url,
+                            "photographer": photo["user"]["name"],
+                            "photographer_url": photo["user"]["links"]["html"],
+                            "alt": photo.get("alt_description", f"{place_name} à {city}"),
+                            "source": "Unsplash"
+                        }
+                        st.session_state.image_cache[cache_key] = result
+                        return result
+        except:
+            pass
+  
+    # Essayer Pexels
+    if PEXELS_API_KEY:
+        try:
+            headers = {"Authorization": PEXELS_API_KEY}
+            url = "https://api.pexels.com/v1/search"
+          
+            queries = [
+                f"{place_name} {city} tourisme",
+                f"{place_name} monument {country}",
+                f"{city} attractions",
+                place_name
+            ]
+          
+            for query in queries:
+                params = {
+                    "query": query,
+                    "per_page": 1,
+                    "orientation": "landscape"
+                }
+              
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("photos") and len(data["photos"]) > 0:
+                        photo = data["photos"][0]
+                        image_url = photo["src"]["large"] if size == "large" else photo["src"]["medium"]
+                      
+                        result = {
+                            "url": image_url,
+                            "photographer": photo["photographer"],
+                            "photographer_url": photo["photographer_url"],
+                            "alt": photo.get("alt", f"{place_name} à {city}"),
+                            "source": "Pexels"
+                        }
+                        st.session_state.image_cache[cache_key] = result
+                        return result
+        except:
+            pass
+  
+    # Solution de repli : Utiliser Wikimedia Commons pour les lieux célèbres
+    try:
+        search_query = f"{place_name} {city}"
+        wiki_url = "https://en.wikipedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "format": "json",
+            "prop": "pageimages",
+            "piprop": "original",
+            "titles": search_query
+        }
+      
+        response = requests.get(wiki_url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            pages = data.get("query", {}).get("pages", {})
+            for page in pages.values():
+                if "original" in page:
+                    result = {
+                        "url": page["original"]["source"],
+                        "photographer": "Wikimedia Commons",
+                        "photographer_url": "https://commons.wikimedia.org",
+                        "alt": f"{place_name}",
+                        "source": "Wikimedia"
+                    }
+                    st.session_state.image_cache[cache_key] = result
+                    return result
+    except:
+        pass
+  
+    # Retourner None si aucune image trouvée
+    return None
+
+# Fonction pour récupérer des lieux réels pour une ville
+def get_real_places(city, country, limit=10):
+    """Récupérer des lieux touristiques réels pour une ville depuis plusieurs APIs"""
+    cache_key = f"{city}_{country}"
+  
+    if cache_key in st.session_state.places_cache:
+        return st.session_state.places_cache[cache_key]
+  
+    places = []
+  
+    # Récupérer les coordonnées de la ville
+    lat, lon = get_city_coordinates(city, country)
+  
+    # Essayer l'API OpenTripMap d'abord
+    opentripmap_places = get_places_from_opentripmap(lat, lon, limit=limit)
+    places.extend(opentripmap_places)
+  
+    # Essayer l'API Foursquare
+    foursquare_places = get_places_from_foursquare(city, country)
+    places.extend(foursquare_places)
+  
+    # Si aucun lieu trouvé depuis les APIs, utiliser la base de données de repli
+    if not places:
+        fallback_places = {
+"Colombo": [
+{"name": "Gangaramaya Temple", "type": "Temple bouddhiste", "rating": 4.5, "description": "Un magnifique complexe de temple bouddhiste à Colombo avec une architecture traditionnelle et un musée."},
+{"name": "Galle Face Green", "type": "Parc urbain", "rating": 4.3, "description": "Parc urbain en bord de mer idéal pour les promenades du soir, le vol de cerfs-volants et les vues sur le coucher du soleil."},
+{"name": "National Museum of Colombo", "type": "Musée", "rating": 4.2, "description": "Le plus grand musée du Sri Lanka présentant le patrimoine culturel et les artefacts historiques."},
+{"name": "Mount Lavinia Beach", "type": "Plage", "rating": 4.2, "description": "Zone de plage populaire avec des sables dorés, des spots de natation et des restaurants en bord de mer."},
+{"name": "Viharamahadevi Park", "type": "Parc", "rating": 4.1, "description": "Le plus grand parc de Colombo avec de beaux jardins, des fontaines et une immense statue de Bouddha."},
+{"name": "Independence Memorial Hall", "type": "Monument", "rating": 4.0, "description": "Monument historique commémorant l'indépendance vis-à-vis de la domination britannique."},
+{"name": "Pettah Floating Market", "type": "Marché", "rating": 4.0, "description": "Marché flottant coloré avec des produits locaux, des artisanats et de la street food."},
+{"name": "Colombo Dutch Museum", "type": "Musée", "rating": 3.9, "description": "Musée présentant l'histoire coloniale hollandaise dans un bâtiment restauré du XVIIe siècle."},
+{"name": "Seema Malaka Temple", "type": "Temple bouddhiste", "rating": 4.3, "description": "Temple serein sur le lac Beira conçu par Geoffrey Bawa."},
+{"name": "Colombo Lotus Tower", "type": "Tour d'observation", "rating": 4.1, "description": "La plus haute tour d'Asie du Sud avec des terrasses d'observation et des vues panoramiques sur la ville."}
+],
+"Kandy": [
+{"name": "Temple of the Sacred Tooth Relic", "type": "Temple bouddhiste", "rating": 4.8, "description": "Site du patrimoine mondial de l'UNESCO abritant la relique de la dent de Bouddha, le site bouddhiste le plus sacré du Sri Lanka."},
+{"name": "Kandy Lake", "type": "Lac", "rating": 4.2, "description": "Lac artificiel scénique au cœur de Kandy, parfait pour les promenades du soir avec vue sur le temple."},
+{"name": "Royal Botanical Gardens Peradeniya", "type": "Jardin botanique", "rating": 4.6, "description": "L'un des plus beaux jardins botaniques d'Asie avec des collections variées de plantes et une maison d'orchidées."},
+{"name": "Bahiravokanda Vihara Buddha Statue", "type": "Monument", "rating": 4.4, "description": "Immense statue de Bouddha blanc surplombant Kandy avec des vues panoramiques sur la ville."},
+{"name": "Udawatta Kele Sanctuary", "type": "Réserve forestière", "rating": 4.3, "description": "Réserve forestière avec des sentiers de randonnée, de l'observation d'oiseaux et de la tranquillité près du Temple de la Dent."},
+{"name": "Kandy Arts & Crafts Association", "type": "Centre d'artisanat", "rating": 4.0, "description": "Centre présentant les arts, artisanats et sculptures sur bois traditionnels du Sri Lanka."},
+{"name": "Commonwealth War Cemetery", "type": "Mémorial", "rating": 4.2, "description": "Cimetière bien entretenu honorant les soldats du Commonwealth de la Seconde Guerre mondiale."},
+{"name": "Kandy View Point", "type": "Point de vue", "rating": 4.5, "description": "Meilleur point de vue pour des photos panoramiques de la ville de Kandy et du lac."},
+{"name": "National Museum Kandy", "type": "Musée", "rating": 3.8, "description": "Musée dans l'ancien palais royal présentant l'histoire et la culture de Kandy."},
+{"name": "Embekka Devalaya", "type": "Temple hindou", "rating": 4.3, "description": "Célèbre pour ses sculptures sur bois intricées et ses piliers, site provisoire de l'UNESCO."}
+],
+"Galle": [
+{"name": "Galle Fort", "type": "Fort", "rating": 4.8, "description": "Site du patrimoine mondial de l'UNESCO avec une architecture coloniale hollandaise, des remparts et des rues charmantes."},
+{"name": "Unawatuna Beach", "type": "Plage", "rating": 4.6, "description": "Plage en forme de croissant immaculée avec des récifs coralliens, des sports nautiques et des cafés de plage."},
+{"name": "Japanese Peace Pagoda", "type": "Pagode", "rating": 4.3, "description": "Stupa paisible sur la colline Rumassala avec des vues panoramiques sur l'océan et des zones de méditation."},
+{"name": "Galle Lighthouse", "type": "Phare", "rating": 4.4, "description": "Phare emblématique au bord du fort de Galle, la plus ancienne station lumineuse du Sri Lanka."},
+{"name": "National Maritime Museum", "type": "Musée", "rating": 4.0, "description": "Musée présentant l'histoire maritime, la biologie marine et les artefacts navals."},
+{"name": "Jungle Beach", "type": "Plage", "rating": 4.5, "description": "Plage isolée entourée de jungle, accessible par une courte randonnée depuis Unawatuna."},
+{"name": "Galle Fort Clock Tower", "type": "Lieu emblématique", "rating": 4.2, "description": "Tour d'horloge historique à l'entrée du fort, construite en 1883."},
+{"name": "Martin Wickramasinghe Museum", "type": "Musée", "rating": 4.1, "description": "Musée dédié à l'auteur renommé du Sri Lanka dans sa maison d'enfance."},
+{"name": "Rumassala Sanctuary", "type": "Sanctuaire", "rating": 4.3, "description": "Sanctuaire de jungle avec des sentiers de randonnée, des plantes médicinales et un accès à la plage."},
+{"name": "St. Mary's Cathedral", "type": "Église", "rating": 4.0, "description": "Église catholique historique dans le fort de Galle avec une belle architecture."}
+],
+"Negombo": [
+{"name": "Negombo Beach", "type": "Plage", "rating": 4.3, "description": "Longue plage de sable doré proche de l'aéroport international de Colombo, parfaite pour les promenades au coucher du soleil."},
+{"name": "Negombo Fish Market", "type": "Marché", "rating": 4.2, "description": "Marché aux poissons animé présentant la pêche quotidienne, les enchères et les méthodes de pêche traditionnelles."},
+{"name": "Dutch Canal", "type": "Canal", "rating": 4.1, "description": "Réseau historique de canaux construit par les Hollandais, parfait pour des balades en bateau et l'observation d'oiseaux."},
+{"name": "St. Mary's Church", "type": "Église", "rating": 4.3, "description": "Belle église catholique avec une architecture impressionnante et une signification religieuse."},
+{"name": "Negombo Lagoon", "type": "Lagune", "rating": 4.4, "description": "Lagune étendue parfaite pour l'observation d'oiseaux, les tours en bateau et l'exploration des mangroves."},
+{"name": "Muthurajawela Marsh", "type": "Zone humide", "rating": 4.2, "description": "Zone humide protégée avec des safaris en bateau, une vie aviaire diversifiée et des forêts de mangroves."},
+{"name": "Angurukaramulla Temple", "type": "Temple bouddhiste", "rating": 4.0, "description": "Temple bouddhiste ancien avec des fresques intricées, des statues et une atmosphère paisible."},
+{"name": "Negombo Dutch Fort", "type": "Fort", "rating": 3.9, "description": "Vestiges du fort hollandais surplombant la lagune de Negombo, construit en 1672."},
+{"name": "Hamilton Canal", "type": "Canal", "rating": 4.0, "description": "Canal scénique construit par les Britanniques, reliant Colombo à Puttalam."},
+{"name": "St. Sebastian's Church", "type": "Église", "rating": 4.1, "description": "Église de style gothique avec de belles fenêtres en vitrail et une architecture."}
+],
+"Bentota": [
+{"name": "Bentota Beach", "type": "Plage", "rating": 4.5, "description": "Longue plage dorée parfaite pour la natation, les sports nautiques et la relaxation avec des eaux calmes."},
+{"name": "Brief Garden", "type": "Jardin", "rating": 4.4, "description": "Beau jardin créé par Bevis Bawa, frère de l'architecte Geoffrey Bawa."},
+{"name": "Kosgoda Turtle Hatchery", "type": "Centre de conservation", "rating": 4.3, "description": "Projet de conservation et d'écloserie de tortues marines protégeant les espèces en danger."},
+{"name": "Bentota River Safari", "type": "Croisière fluviale", "rating": 4.4, "description": "Safari en bateau à travers les forêts de mangroves, les voies navigables et les spots d'observation d'oiseaux."},
+{"name": "Lunuganga Garden", "type": "Jardin", "rating": 4.6, "description": "Domaine de campagne et jardin de l'architecte Geoffrey Bawa, présentant un design paysager."},
+{"name": "Galapatha Raja Maha Viharaya", "type": "Temple bouddhiste", "rating": 4.2, "description": "Temple ancien avec une signification historique et une belle architecture."},
+{"name": "Water Sports Center", "type": "Sports d'aventure", "rating": 4.3, "description": "Jet ski, promenades en banane, planche à voile et autres activités aquatiques."},
+{"name": "Bentota Railway Bridge", "type": "Pont", "rating": 4.0, "description": "Pont ferroviaire historique avec des vues scéniques sur la rivière Bentota."},
+{"name": "Induruwa Beach", "type": "Plage", "rating": 4.2, "description": "Section de plage moins bondée idéale pour une natation paisible et une relaxation."},
+{"name": "Bawa's Bentota Beach Hotel", "type": "Architecture", "rating": 4.3, "description": "Hôtel emblématique conçu par Geoffrey Bawa, chef-d'œuvre du modernisme tropical."}
+],
+"Hikkaduwa": [
+{"name": "Hikkaduwa Beach", "type": "Plage", "rating": 4.5, "description": "Célèbre pour le surf, la vie nocturne, les récifs coralliens et une culture de plage vibrante."},
+{"name": "Hikkaduwa Coral Sanctuary", "type": "Sanctuaire marin", "rating": 4.4, "description": "Zone marine protégée avec des tours en bateau à fond de verre et de la plongée en apnée."},
+{"name": "Tsunami Honganji Temple", "type": "Temple bouddhiste", "rating": 4.2, "description": "Temple de style japonais construit après le tsunami de 2004 comme mémorial."},
+{"name": "Hikkaduwa Turtle Hatchery", "type": "Centre de conservation", "rating": 4.3, "description": "Projet de conservation protégeant les tortues de mer et leurs nouveau-nés."},
+{"name": "Narigama Beach", "type": "Plage", "rating": 4.4, "description": "Section de plage moins bondée avec de bonnes conditions de natation et des bars de plage."},
+{"name": "Hikkaduwa National Park", "type": "Parc national", "rating": 4.3, "description": "Parc national marin protégeant les récifs coralliens et la biodiversité marine."},
+{"name": "Moonstone Mine", "type": "Mine", "rating": 4.0, "description": "Zone de mine de pierre de lune traditionnelle présentant l'industrie locale des gemmes."},
+{"name": "Seenigama Temple", "type": "Temple hindou", "rating": 4.1, "description": "Temple ancien sur une petite île, accessible pendant la marée basse."},
+{"name": "Hikkaduwa Surf Point", "type": "Spot de surf", "rating": 4.5, "description": "Spot de surf populaire avec des vagues constantes pour débutants et experts."},
+{"name": "Hikkaduwa Glass Bottom Boats", "type": "Tour en bateau", "rating": 4.2, "description": "Tours en bateau à fond de verre pour voir les récifs coralliens et la vie marine sans se mouiller."}
+],
+"Mirissa": [
+{"name": "Mirissa Beach", "type": "Plage", "rating": 4.7, "description": "Plage pittoresque avec des palmiers, connue pour l'observation des baleines et de beaux couchers de soleil."},
+{"name": "Mirissa Whale Watching", "type": "Tour de faune sauvage", "rating": 4.6, "description": "Tours en bateau pour observer des baleines bleues, des cachalots et des dauphins dans leur habitat naturel."},
+{"name": "Secret Beach", "type": "Plage", "rating": 4.5, "description": "Plage isolée accessible par un chemin de jungle, parfaite pour la privacy et la relaxation."},
+{"name": "Coconut Tree Hill", "type": "Point de vue", "rating": 4.4, "description": "Point de vue emblématique avec des cocotiers et des vues panoramiques sur l'océan, parfait pour les photos."},
+{"name": "Parrot Rock", "type": "Point de vue", "rating": 4.3, "description": "Formation rocheuse avec des vues panoramiques sur la plage de Mirissa et les environs."},
+{"name": "Mirissa Fishing Harbour", "type": "Port", "rating": 4.0, "description": "Port de pêche actif avec des bateaux colorés, des fruits de mer frais et une atmosphère locale."},
+{"name": "Weligama Bay", "type": "Baie", "rating": 4.3, "description": "Baie voisine populaire pour les leçons de surf avec des vagues douces pour débutants."},
+{"name": "Mirissa Marine Park", "type": "Parc marin", "rating": 4.2, "description": "Zone marine protégée avec une vie marine diversifiée et des formations coralliennes."},
+{"name": "Polhena Beach", "type": "Plage", "rating": 4.1, "description": "Plage abritée avec des eaux calmes idéale pour la natation et la plongée en apnée."},
+{"name": "Mirissa Cliff", "type": "Point de vue", "rating": 4.3, "description": "Zone de falaise avec des restaurants et des bars offrant des vues sur le coucher du soleil sur l'océan."}
+],
+"Tangalle": [
+{"name": "Tangalle Beach", "type": "Plage", "rating": 4.6, "description": "Longue plage immaculée avec du sable doré, des formations rocheuses et une eau turquoise claire."},
+{"name": "Rekawa Turtle Conservation Project", "type": "Centre de conservation", "rating": 4.5, "description": "Plage de ponte de tortues avec un projet de conservation et des tours d'observation nocturne des tortues."},
+{"name": "Hummanaya Blow Hole", "type": "Merveille naturelle", "rating": 4.4, "description": "Seul trou de soufflage au Sri Lanka, où l'eau de mer jaillit à travers des formations rocheuses."},
+{"name": "Mulkirigala Rock Temple", "type": "Temple bouddhiste", "rating": 4.3, "description": "Temple rocheux ancien avec des grottes, des fresques et des vues panoramiques depuis le sommet."},
+{"name": "Medaketiya Beach", "type": "Plage", "rating": 4.5, "description": "Plage isolée près de Tangalle, parfaite pour la natation et la relaxation."},
+{"name": "Tangalle Fishing Harbor", "type": "Port", "rating": 4.0, "description": "Port de pêche traditionnel avec des bateaux colorés et un marché de fruits de mer frais."},
+{"name": "Wewurukannala Temple", "type": "Temple bouddhiste", "rating": 4.2, "description": "Temple avec la plus grande statue de Bouddha assis au Sri Lanka (160 pieds de haut)."},
+{"name": "Goyambokka Beach", "type": "Plage", "rating": 4.4, "description": "Belle plage abritée avec des eaux calmes, idéale pour les familles avec enfants."},
+{"name": "Kalametiya Bird Sanctuary", "type": "Sanctuaire d'oiseaux", "rating": 4.3, "description": "Zone de lagune et de mangroves parfaite pour l'observation d'oiseaux et les safaris en bateau."},
+{"name": "Palm Paradise Cabanas", "type": "Résort de plage", "rating": 4.2, "description": "Hébergement en bord de mer avec des cabanes traditionnelles et une plage bordée de palmiers."}
+],
+"Nuwara Eliya": [
+{"name": "Gregory Lake", "type": "Lac", "rating": 4.3, "description": "Lac artificiel scénique avec des promenades en bateau, de l'équitation, des pédalos en forme de cygne et de belles vues."},
+{"name": "Horton Plains National Park", "type": "Parc national", "rating": 4.7, "description": "Site du patrimoine mondial de l'UNESCO avec des sentiers de randonnée vers le point de vue World's End et la chute Baker."},
+{"name": "Tea Plantations", "type": "Plantation", "rating": 4.6, "description": "Célèbres plantations de thé offrant des tours, des visites d'usines et des dégustations de thé de Ceylan."},
+{"name": "Victoria Park", "type": "Parc", "rating": 4.2, "description": "Beau jardin botanique avec des plantes exotiques, des massifs de fleurs et de l'observation d'oiseaux."},
+{"name": "Lover's Leap Waterfall", "type": "Chute d'eau", "rating": 4.1, "description": "Chute d'eau scénique avec des sentiers de randonnée, des vues sur les plantations de thé et des légendes locales."},
+{"name": "Single Tree Hill", "type": "Point de vue", "rating": 4.4, "description": "Point le plus élevé de Nuwara Eliya avec des vues panoramiques à 360 degrés sur les collines environnantes."},
+{"name": "Nuwara Eliya Golf Club", "type": "Terrain de golf", "rating": 4.3, "description": "L'un des plus anciens terrains de golf d'Asie (1889) avec des vues sur les montagnes et un layout difficile."},
+{"name": "Seetha Amman Temple", "type": "Temple hindou", "rating": 4.2, "description": "Temple coloré associé à l'épopée du Ramayana, situé à Seetha Eliya."},
+{"name": "Galway's Land National Park", "type": "Parc national", "rating": 4.0, "description": "Petit parc national idéal pour l'observation d'oiseaux, les promenades en nature et les espèces endémiques."},
+{"name": "Pedro Tea Estate", "type": "Usine de thé", "rating": 4.3, "description": "L'une des plus anciennes usines de thé du Sri Lanka offrant des visites guidées et des dégustations de thé."}
+],
+"Ella": [
+{"name": "Nine Arch Bridge", "type": "Pont", "rating": 4.8, "description": "Pont ferroviaire emblématique de l'époque coloniale au milieu des plantations de thé, parfait pour la photographie."},
+{"name": "Little Adam's Peak", "type": "Sentier de randonnée", "rating": 4.7, "description": "Randonnée facile avec des vues panoramiques sur l'Ella Gap, les montagnes et les plantations de thé."},
+{"name": "Ravana Falls", "type": "Chute d'eau", "rating": 4.5, "description": "Belle chute d'eau en cascade associée à la légende du Ramayana, haute de 25 m."},
+{"name": "Ella Rock", "type": "Sentier de randonnée", "rating": 4.6, "description": "Randonnée difficile avec des vues époustouflantes sur les collines et les vallées environnantes."},
+{"name": "Ella Spice Garden", "type": "Jardin", "rating": 4.3, "description": "Tour éducatif des épices, herbes et plantes ayurvédiques traditionnelles du Sri Lanka."},
+{"name": "Ravana's Cave", "type": "Grotte", "rating": 4.2, "description": "Grotte historique associée à l'épopée du Ramayana, située sur des falaises près d'Ella."},
+{"name": "Ella Village", "type": "Village", "rating": 4.4, "description": "Charmant village de montagne avec des cafés, des guesthouses, des boutiques locales et une atmosphère amicale."},
+{"name": "Demodara Loop", "type": "Ingénierie ferroviaire", "rating": 4.3, "description": "Célèbre boucle ferroviaire en spirale, merveille d'ingénierie où le train passe au-dessus de lui-même."},
+{"name": "Ella Gap Viewpoint", "type": "Point de vue", "rating": 4.5, "description": "Vues spectaculaires sur la vallée, les plaines du sud et les montagnes lointaines."},
+{"name": "Ella Train Station", "type": "Gare ferroviaire", "rating": 4.1, "description": "Gare ferroviaire pittoresque avec une architecture coloniale et des vues sur les montagnes."}
+],
+"Badulla": [
+{"name": "Dunhinda Falls", "type": "Chute d'eau", "rating": 4.6, "description": "Magnifique chute d'eau haute de 64 m, l'une des plus belles du Sri Lanka."},
+{"name": "Muthiyangana Raja Maha Viharaya", "type": "Temple bouddhiste", "rating": 4.3, "description": "Temple ancien censé avoir été visité par le Seigneur Bouddha, site de pèlerinage important."},
+{"name": "Badulla Park", "type": "Parc", "rating": 4.1, "description": "Parc central de la ville de Badulla avec des jardins, des sentiers de promenade et une atmosphère coloniale."},
+{"name": "St. Mark's Church", "type": "Église", "rating": 4.0, "description": "Église anglicane historique construite en 1857 avec une belle architecture et des vitraux."},
+{"name": "Bogoda Wooden Bridge", "type": "Pont", "rating": 4.4, "description": "Pont en bois ancien du XVIe siècle, le plus ancien pont en bois survivant au Sri Lanka."},
+{"name": "Halpewatte Tea Factory", "type": "Usine de thé", "rating": 4.2, "description": "Usine de thé offrant des tours de transformation du thé et des dégustations de thé de la région d'Uva."},
+{"name": "Badulla Market", "type": "Marché", "rating": 4.0, "description": "Marché local avec des produits frais, des épices et des biens des régions environnantes."},
+{"name": "Uma Oya", "type": "Rivière", "rating": 4.2, "description": "Vallée de rivière scénique avec des chutes d'eau, des sentiers de randonnée et des spots de natation naturels."},
+{"name": "Kandyan Dance Show", "type": "Spectacle culturel", "rating": 4.3, "description": "Performances de danse kandyan traditionnelle présentant la culture sri-lankaise."},
+{"name": "Badulla Railway Station", "type": "Gare ferroviaire", "rating": 4.1, "description": "Gare ferroviaire historique à l'extrémité de la célèbre route de train Colombo-Badulla."}
+],
+"Bandarawela": [
+{"name": "Dowa Rock Temple", "type": "Temple bouddhiste", "rating": 4.4, "description": "Temple rocheux ancien avec une sculpture de Bouddha inachevée et des peintures de grottes."},
+{"name": "Bandarawela Town", "type": "Ville", "rating": 4.2, "description": "Charmant village de montagne avec une architecture coloniale et un climat frais."},
+{"name": "Adisham Bungalow", "type": "Maison historique", "rating": 4.3, "description": "Monastère de style maison de campagne anglaise avec de beaux jardins et une architecture."},
+{"name": "Lipton's Seat", "type": "Point de vue", "rating": 4.7, "description": "Célèbre point de vue où Sir Thomas Lipton a inspecté son empire du thé, vues panoramiques."},
+{"name": "St. Andrew's Church", "type": "Église", "rating": 4.1, "description": "Église historique construite en 1908 avec de beaux vitraux et une architecture."},
+{"name": "Bandarawela Golf Club", "type": "Terrain de golf", "rating": 4.2, "description": "Terrain de golf 9 trous avec des vues sur les montagnes et un terrain difficile."},
+{"name": "Bandarawela Market", "type": "Marché", "rating": 4.0, "description": "Marché local avec des légumes frais des collines, des fruits et des produits locaux."},
+{"name": "Diyaluma Falls", "type": "Chute d'eau", "rating": 4.5, "description": "Deuxième plus haute chute d'eau du Sri Lanka (220 m), avec des piscines naturelles infinies au sommet."},
+{"name": "Bandarawela Railway Station", "type": "Gare ferroviaire", "rating": 4.1, "description": "Gare ferroviaire historique sur la ligne principale, cadre montagneux magnifique."},
+{"name": "Haputale", "type": "Ville voisine", "rating": 4.3, "description": "Ville de colline voisine avec des plantations de thé et des vues époustouflantes sur les plaines du sud."}
+],
+"Hatton": [
+{"name": "Adam's Peak", "type": "Montagne", "rating": 4.8, "description": "Site de pèlerinage sacré de montagne avec des vues sur le lever du soleil et un sanctuaire de l'empreinte de Bouddha."},
+{"name": "St. Clair's Falls", "type": "Chute d'eau", "rating": 4.5, "description": "Chute d'eau la plus large du Sri Lanka, connue comme le 'Petit Niagara du Sri Lanka'."},
+{"name": "Devon Falls", "type": "Chute d'eau", "rating": 4.4, "description": "Chute d'eau haute de 97 m nommée d'après un planteur de café anglais, visible depuis la route principale."},
+{"name": "Hatton Town", "type": "Ville", "rating": 4.1, "description": "Ville principale servant les pèlerins d'Adam's Peak et les plantations de thé environnantes."},
+{"name": "Castlereagh Reservoir", "type": "Réservoir", "rating": 4.3, "description": "Beau réservoir entouré de plantations de thé, parfait pour la photographie."},
+{"name": "Gartmore Falls", "type": "Chute d'eau", "rating": 4.2, "description": "Chute d'eau moins connue près de Hatton, accessible par des chemins à travers les domaines de thé."},
+{"name": "Tea Plantation Tours", "type": "Plantation", "rating": 4.4, "description": "Tours guidés des domaines de thé pour en apprendre sur la production et la transformation du thé."},
+{"name": "Hatton Market", "type": "Marché", "rating": 4.0, "description": "Marché local servant les communautés des collines avec des produits frais et des biens."},
+{"name": "Laxapana Falls", "type": "Chute d'eau", "rating": 4.3, "description": "Chute d'eau haute de 129 m, l'une des plus hautes du Sri Lanka, située près d'une centrale hydroélectrique."},
+{"name": "Adam's Peak Base Camps", "type": "Site de pèlerinage", "rating": 4.2, "description": "Points de départ pour le pèlerinage d'Adam's Peak avec des guesthouses et des installations."}
+],
+"Sigiriya": [
+{"name": "Sigiriya Rock Fortress", "type": "Site archéologique", "rating": 4.9, "description": "Site du patrimoine mondial de l'UNESCO, ancienne forteresse rocheuse avec des fresques, des jardins et des ruines de palais."},
+{"name": "Pidurangala Rock", "type": "Sentier de randonnée", "rating": 4.7, "description": "Randonnée alternative avec les meilleures vues sur le rocher de Sigiriya, surtout au lever du soleil."},
+{"name": "Sigiriya Museum", "type": "Musée", "rating": 4.2, "description": "Musée moderne expliquant l'histoire, l'archéologie et les efforts de conservation de Sigiriya."},
+{"name": "Sigiriya Frescoes", "type": "Art ancien", "rating": 4.6, "description": "Célèbres peintures anciennes de nymphes célestes dans une poche rocheuse abritée."},
+{"name": "Mirror Wall", "type": "Élément archéologique", "rating": 4.3, "description": "Mur ancien poli avec des graffitis historiques des VIIIe-Xe siècles."},
+{"name": "Water Gardens", "type": "Jardins", "rating": 4.4, "description": "Ingénierie hydraulique ancienne sophistiquée avec des piscines, des fontaines et des jardins."},
+{"name": "Lion's Paw Terrace", "type": "Élément archéologique", "rating": 4.5, "description": "Vestiges de la gigantesque statue de lion qui formait l'entrée du palais du sommet."},
+{"name": "Boulder Gardens", "type": "Jardins", "rating": 4.2, "description": "Complexe de jardins ancien avec des rochers naturels, des sentiers et des pavillons."},
+{"name": "Sigiriya Village Tour", "type": "Tour culturel", "rating": 4.3, "description": "Tours culturels des villages locaux pour expérimenter la vie sri-lankaise traditionnelle."},
+{"name": "Elephant Safari", "type": "Safari de faune sauvage", "rating": 4.4, "description": "Safaris à dos d'éléphant à travers les forêts et la campagne environnantes."}
+],
+"Dambulla": [
+{"name": "Dambulla Cave Temple", "type": "Temple bouddhiste", "rating": 4.8, "description": "Site du patrimoine mondial de l'UNESCO avec cinq grottes contenant des statues de Bouddha et des murales."},
+{"name": "Golden Temple of Dambulla", "type": "Temple bouddhiste", "rating": 4.4, "description": "Grande statue de Bouddha dorée et musée à la base du complexe de temple en grotte."},
+{"name": "Rose Quartz Mountain", "type": "Montagne", "rating": 4.3, "description": "Montagne unique avec des dépôts de quartz rose et des sentiers de randonnée avec des vues panoramiques."},
+{"name": "Ibbankatuwa Megalithic Tombs", "type": "Site archéologique", "rating": 4.0, "description": "Site de sépulture ancien datant de 700 av. J.-C. avec des arrangements en pierre."},
+{"name": "Dambulla Market", "type": "Marché", "rating": 4.1, "description": "Marché local vibrant avec des épices, des fruits, des légumes et des produits locaux."},
+{"name": "Na Uyana Aranya", "type": "Monastère forestier", "rating": 4.5, "description": "Grand monastère forestier avec des opportunités de méditation et des environs paisibles."},
+{"name": "Dambulla Dedicated Economic Centre", "type": "Marché", "rating": 4.0, "description": "Grand marché de gros pour les fruits et légumes des fermes environnantes."},
+{"name": "Spice Gardens", "type": "Jardin", "rating": 4.2, "description": "Tours éducatifs des jardins d'épices présentant les épices et herbes du Sri Lanka."},
+{"name": "Kandalama Hotel", "type": "Architecture", "rating": 4.6, "description": "Hôtel emblématique conçu par Geoffrey Bawa, se fondant dans le paysage naturel."},
+{"name": "Dambulla Cricket Stadium", "type": "Lieu de sport", "rating": 4.1, "description": "Stade de cricket international accueillant des matchs tests et one-day internationals."}
+],
+"Polonnaruwa": [
+{"name": "Ancient City of Polonnaruwa", "type": "Site archéologique", "rating": 4.8, "description": "Site du patrimoine mondial de l'UNESCO avec des ruines bien préservées de l'ancienne capitale médiévale du Sri Lanka."},
+{"name": "Gal Vihara", "type": "Statues bouddhistes", "rating": 4.7, "description": "Célèbre temple rocheux avec quatre magnifiques statues de Bouddha sculptées dans un seul rocher de granit."},
+{"name": "Parakrama Samudra", "type": "Réservoir ancien", "rating": 4.5, "description": "Énorme réservoir ancien construit par le roi Parakramabahu, couvrant 2 500 hectares."},
+{"name": "Polonnaruwa Vatadage", "type": "Structure ancienne", "rating": 4.6, "description": "Maison circulaire de reliques avec des sculptures sur pierre intricées et des pierres de lune."},
+{"name": "Lankatilaka Temple", "type": "Temple bouddhiste", "rating": 4.4, "description": "Imposant temple en brique avec une immense statue de Bouddha et une grandeur architecturale."},
+{"name": "Royal Palace Complex", "type": "Site archéologique", "rating": 4.3, "description": "Ruines de l'ancien palais royal, de la chambre du conseil et des bains royaux."},
+{"name": "Archaeological Museum", "type": "Musée", "rating": 4.1, "description": "Musée présentant des artefacts, des sculptures et des informations de la période de Polonnaruwa."},
+{"name": "Shiva Devale", "type": "Temple hindou", "rating": 4.2, "description": "Anciens temples hindous montrant une influence architecturale sud-indienne."},
+{"name": "Statue of King Parakramabahu", "type": "Monument", "rating": 4.3, "description": "Statue en pierre censée représenter le roi Parakramabahu Ier tenant un manuscrit sur feuille de palmier."},
+{"name": "Polonnaruwa Quadrangle", "type": "Site archéologique", "rating": 4.5, "description": "Quadrilatère sacré contenant les monuments religieux les plus importants dans une zone compacte."}
+],
+"Anuradhapura": [
+{"name": "Sacred City of Anuradhapura", "type": "Site archéologique", "rating": 4.8, "description": "Site du patrimoine mondial de l'UNESCO, ancienne capitale avec des sites bouddhistes sacrés datant du IVe siècle av. J.-C."},
+{"name": "Sri Maha Bodhi", "type": "Arbre sacré", "rating": 4.9, "description": "L'arbre historiquement documenté le plus ancien du monde, issu d'une branche de l'arbre d'illumination de Bouddha."},
+{"name": "Ruwanwelisaya Stupa", "type": "Stupa bouddhiste", "rating": 4.7, "description": "Énorme stupa blanc construit par le roi Dutugemunu, l'un des plus révérés du Sri Lanka."},
+{"name": "Jetavanaramaya Stupa", "type": "Stupa bouddhiste", "rating": 4.6, "description": "L'une des structures anciennes les plus hautes du monde lors de sa construction (122 m)."},
+{"name": "Abhayagiri Monastery", "type": "Complexe monastique", "rating": 4.5, "description": "Complexe monastique ancien avec un musée, des étangs jumeaux et un stupa massif."},
+{"name": "Isurumuniya Temple", "type": "Temple bouddhiste", "rating": 4.4, "description": "Temple rocheux célèbre pour ses sculptures sur roche, y compris les 'Amants d'Isurumuniya'."},
+{"name": "Samadhi Buddha Statue", "type": "Statue bouddhiste", "rating": 4.6, "description": "Célèbre statue de Bouddha en granit en pose de méditation, considérée comme un chef-d'œuvre de la sculpture ancienne."},
+{"name": "Kuttam Pokuna", "type": "Étangs anciens", "rating": 4.3, "description": "Étangs jumeaux présentant l'ingénierie et la symétrie sinhalaise ancienne."},
+{"name": "Mihintale", "type": "Montagne sacrée", "rating": 4.7, "description": "Lieu de naissance du bouddhisme au Sri Lanka, site de pèlerinage avec des temples et des stupas."},
+{"name": "Archaeological Museum", "type": "Musée", "rating": 4.2, "description": "Musée présentant des artefacts de la période d'Anuradhapura et expliquant l'histoire du site."}
+],
+"Trincomalee": [
+{"name": "Nilaveli Beach", "type": "Plage", "rating": 4.7, "description": "L'une des plus belles plages du Sri Lanka avec du sable blanc et une eau turquoise claire."},
+{"name": "Pigeon Island National Park", "type": "Parc national", "rating": 4.6, "description": "Parc national marin idéal pour la plongée en apnée, la plongée et l'exploration des récifs coralliens."},
+{"name": "Fort Frederick", "type": "Fort", "rating": 4.3, "description": "Fort historique construit par les Portugais et étendu par les Hollandais, abritant maintenant une base militaire."},
+{"name": "Koneswaram Temple", "type": "Temple hindou", "rating": 4.5, "description": "Complexe de temple hindou ancien sur le rocher Swami avec des vues panoramiques sur l'océan."},
+{"name": "Marble Beach", "type": "Plage", "rating": 4.4, "description": "Plage isolée avec du sable ressemblant au marbre et une eau cristalline, dans une base de l'armée de l'air."},
+{"name": "Uppuveli Beach", "type": "Plage", "rating": 4.3, "description": "Longue plage de sable populaire pour la natation, les sports nautiques et l'hébergement en bord de mer."},
+{"name": "Trinco Whale Watching", "type": "Tour de faune sauvage", "rating": 4.5, "description": "Tours d'observation des baleines dans le golfe du Bengale pour repérer des baleines bleues et des dauphins."},
+{"name": "Lovers' Leap", "type": "Point de vue", "rating": 4.2, "description": "Point de vue en falaise avec une légende tragique d'amour et des vues sur l'océan."},
+{"name": "Trincomalee War Cemetery", "type": "Mémorial", "rating": 4.1, "description": "Cimetière de guerre du Commonwealth honorant les soldats de la Seconde Guerre mondiale."},
+{"name": "Trincomalee Harbor", "type": "Port", "rating": 4.0, "description": "L'un des meilleurs ports naturels du monde, cinquième plus grand port naturel au monde."}
+],
+"Batticaloa": [
+{"name": "Batticaloa Lagoon", "type": "Lagune", "rating": 4.4, "description": "Deuxième plus grande lagune du Sri Lanka, parfaite pour les promenades en bateau, l'observation d'oiseaux et les vues sur le coucher du soleil."},
+{"name": "Kallady Bridge", "type": "Pont", "rating": 4.2, "description": "Pont emblématique de l'époque hollandaise reliant la ville de Batticaloa à Kallady, connu pour le phénomène des poissons chanteurs."},
+{"name": "Batticaloa Fort", "type": "Fort", "rating": 4.3, "description": "Fort hollandais construit en 1628, surplombant la lagune avec une signification historique et une architecture."},
+{"name": "Pasikudah Beach", "type": "Plage", "rating": 4.6, "description": "L'une des plus belles plages du Sri Lanka avec des eaux turquoise peu profondes, parfaite pour la natation."},
+{"name": "Kalkudah Beach", "type": "Plage", "rating": 4.5, "description": "Longue plage plate idéale pour la natation, la planche à voile et les sports nautiques avec des vagues douces."},
+{"name": "St. Mary's Cathedral", "type": "Église", "rating": 4.2, "description": "Belle cathédrale catholique avec une architecture impressionnante au cœur de Batticaloa."},
+{"name": "Batticaloa Lighthouse", "type": "Phare", "rating": 4.1, "description": "Phare historique au bord de la lagune de Batticaloa avec des vues panoramiques."},
+{"name": "Navatkuli Bridge", "type": "Pont", "rating": 4.0, "description": "Pont de l'époque britannique avec des vues scéniques sur la lagune et le paysage environnant."},
+{"name": "Koddamunai Hindu Temple", "type": "Temple hindou", "rating": 4.3, "description": "Temple hindou proéminent présentant l'architecture tamoule et une signification culturelle."},
+{"name": "Batticaloa Dutch Bar Heritage Museum", "type": "Musée", "rating": 4.1, "description": "Musée dans un bâtiment restauré de l'époque hollandaise présentant l'histoire coloniale et des artefacts."}
+],
+"Pasikudah": [
+{"name": "Pasikudah Beach", "type": "Plage", "rating": 4.7, "description": "Célèbre pour ses eaux turquoise calmes et peu profondes s'étendant 100-200 m du rivage, parfaite pour la natation."},
+{"name": "Coral Reefs", "type": "Vie marine", "rating": 4.5, "description": "Récifs coralliens protégés idéaux pour la plongée en apnée et l'observation de la biodiversité marine."},
+{"name": "Kalkudah Beach", "type": "Plage", "rating": 4.6, "description": "Plage adjacente avec des eaux peu profondes similaires, moins développée et plus naturelle."},
+{"name": "Water Sports Center", "type": "Sports d'aventure", "rating": 4.3, "description": "Jet ski, promenades en banane, kayak et autres activités aquatiques."},
+{"name": "Beach Resorts", "type": "Hébergement", "rating": 4.4, "description": "Résorts de luxe en bord de mer avec des installations de spa, des piscines et une restauration fine."},
+{"name": "Sunset Views", "type": "Point de vue", "rating": 4.6, "description": "Couchers de soleil spectaculaires sur la baie du Bengale avec des couleurs se reflétant sur les eaux calmes."},
+{"name": "Beach Walks", "type": "Activité de plage", "rating": 4.4, "description": "Longues promenades paisibles le long du rivage immaculé, particulièrement agréables au lever du soleil."},
+{"name": "Local Fishing Village", "type": "Expérience culturelle", "rating": 4.2, "description": "Visitez un village de pêche traditionnel pour voir le mode de vie local et les techniques de pêche."},
+{"name": "Beachfront Dining", "type": "Restauration", "rating": 4.3, "description": "Restaurants servant des fruits de mer frais avec des vues sur la plage et la brise océanique."},
+{"name": "Paddle Boarding", "type": "Sport nautique", "rating": 4.4, "description": "Stand-up paddle boarding dans des eaux calmes et peu profondes adapté aux débutants."}
+],
+"Arugam Bay": [
+{"name": "Arugam Bay Beach", "type": "Plage", "rating": 4.7, "description": "Destination de surf de classe mondiale avec des vagues constantes, une ambiance décontractée et une belle plage."},
+{"name": "Pottuvil Point", "type": "Spot de surf", "rating": 4.6, "description": "Célèbre point break de surf pour surfeurs expérimentés, meilleur pendant la saison d'avril-octobre."},
+{"name": "Lahugala National Park", "type": "Parc national", "rating": 4.3, "description": "Sanctuaire d'éléphants avec des trous d'eau naturels, observation d'oiseaux et faune sauvage."},
+{"name": "Muhudu Maha Viharaya", "type": "Temple bouddhiste", "rating": 4.2, "description": "Temple ancien avec un emplacement en bord de mer et une signification archéologique."},
+{"name": "Elephant Rock", "type": "Point de vue", "rating": 4.4, "description": "Spot de randonnée avec des vues panoramiques sur Arugam Bay et la côte environnante."},
+{"name": "Panama Beach", "type": "Plage", "rating": 4.5, "description": "Plage isolée idéale pour la natation, la relaxation et échapper aux foules."},
+{"name": "Surf Schools", "type": "Leçons de surf", "rating": 4.5, "description": "Écoles de surf professionnelles offrant des leçons pour débutants et surfeurs intermédiaires."},
+{"name": "Crocodile Rock", "type": "Spot de surf", "rating": 4.4, "description": "Spot de surf nommé d'après une formation rocheuse en forme de crocodile, adapté aux surfeurs expérimentés."},
+{"name": "Arugam Bay Lagoon", "type": "Lagune", "rating": 4.3, "description": "Lagune calme parfaite pour le kayak, le paddle boarding et l'observation d'oiseaux."},
+{"name": "Beach Bars", "type": "Vie nocturne", "rating": 4.2, "description": "Bars et restaurants en bord de mer avec de la musique live, des feux de camp et une cuisine internationale."}
+],
+"Jaffna": [
+{"name": "Jaffna Fort", "type": "Fort", "rating": 4.4, "description": "Fort hollandais construit en 1680, l'un des forts hollandais les mieux préservés du Sri Lanka."},
+{"name": "Nallur Kandaswamy Temple", "type": "Temple hindou", "rating": 4.7, "description": "Grand complexe de temple hindou, le plus significatif de Jaffna, célèbre pour son festival annuel."},
+{"name": "Jaffna Public Library", "type": "Bibliothèque", "rating": 4.3, "description": "Bibliothèque emblématique symbolisant le patrimoine tamoul et la renaissance, reconstruite après l'incendie de 1981."},
+{"name": "Nagadeepa Purana Viharaya", "type": "Temple bouddhiste", "rating": 4.5, "description": "Temple bouddhiste ancien sur l'île de Nagadeepa, accessible par ferry."},
+{"name": "Keerimalai Springs", "type": "Sources naturelles", "rating": 4.2, "description": "Sources d'eau douce naturelles avec des bassins de bain séparés pour hommes et femmes."},
+{"name": "Jaffna Market", "type": "Marché", "rating": 4.1, "description": "Marché local animé avec des produits frais, des sucreries tamoules et une expérience culturelle."},
+{"name": "Casuarina Beach", "type": "Plage", "rating": 4.3, "description": "Belle plage avec des arbres casuarinas, idéale pour les promenades au coucher du soleil et la relaxation."},
+{"name": "Point Pedro", "type": "Ville", "rating": 4.2, "description": "Point le plus septentrional du Sri Lanka avec un phare et un port de pêche."},
+{"name": "Kankesanturai Beach", "type": "Plage", "rating": 4.3, "description": "Plage immaculée près du port de Kankesanturai, moins bondée avec une beauté naturelle."},
+{"name": "Jaffna Archaeological Museum", "type": "Musée", "rating": 4.0, "description": "Musée présentant des artefacts du royaume de Jaffna et du patrimoine culturel hindou."}
+],
+"Mannar": [
+{"name": "Adam's Bridge", "type": "Formation naturelle", "rating": 4.5, "description": "Chaîne de hauts-fonds calcaires entre l'Inde et le Sri Lanka, visible depuis Mannar."},
+{"name": "Mannar Fort", "type": "Fort", "rating": 4.2, "description": "Fort portugais puis hollandais surplombant le golfe de Mannar, construit en 1560."},
+{"name": "Baobab Tree", "type": "Arbre", "rating": 4.4, "description": "Arbre baobab ancien censé avoir 700 ans, apporté par des commerçants arabes."},
+{"name": "Mannar Island", "type": "Île", "rating": 4.3, "description": "Île reliée au continent par une chaussée, connue pour la production de sel et la pêche."},
+{"name": "Thanthirimale Temple", "type": "Temple bouddhiste", "rating": 4.3, "description": "Temple ancien avec des inscriptions rocheuses et des liens avec l'arrivée du bouddhisme."},
+{"name": "Giant's Tank", "type": "Réservoir", "rating": 4.1, "description": "Réservoir d'irrigation ancien construit par le roi Dhatusena au Ve siècle apr. J.-C."},
+{"name": "Mannar Beach", "type": "Plage", "rating": 4.2, "description": "Longue plage venteuse avec des opportunités de collecte de coquillages et des vues sur le coucher du soleil."},
+{"name": "Our Lady of Madhu Church", "type": "Église", "rating": 4.4, "description": "Important site de pèlerinage catholique avec un sanctuaire de Notre-Dame de Madhu."},
+{"name": "Mannar Market", "type": "Marché", "rating": 4.0, "description": "Marché local avec des fruits de mer, du poisson séché et des produits uniques à la région de Mannar."},
+{"name": "Birdwatching Sites", "type": "Sanctuaire d'oiseaux", "rating": 4.3, "description": "Zone importante pour les oiseaux migrateurs y compris les flamants roses pendant la saison."}
+],
+"Vavuniya": [
+{"name": "Vavuniya Museum", "type": "Musée", "rating": 4.1, "description": "Musée local présentant des artefacts et des informations sur la région de Vavuniya."},
+{"name": "Kandasamy Kovil", "type": "Temple hindou", "rating": 4.2, "description": "Temple hindou proéminent à Vavuniya avec une architecture colorée."},
+{"name": "Vavuniya Tank", "type": "Réservoir", "rating": 4.0, "description": "Réservoir d'irrigation ancien fournissant de l'eau aux zones agricoles environnantes."},
+{"name": "Pandivirichchan Thermal Springs", "type": "Sources thermales", "rating": 4.3, "description": "Sources thermales naturelles censées avoir des propriétés médicinales."},
+{"name": "Vavuniya Market", "type": "Marché", "rating": 4.0, "description": "Marché principal servant la région nord avec des biens divers et des produits."},
+{"name": "Sivapuram Temple", "type": "Temple hindou", "rating": 4.1, "description": "Temple ancien avec une signification culturelle et religieuse."},
+{"name": "Vavuniya Town", "type": "Ville", "rating": 4.0, "description": "Ville porte d'entrée de la province du nord avec une importance administrative et commerciale."},
+{"name": "Agriculture Farms", "type": "Ferme", "rating": 4.1, "description": "Visitez des fermes locales pour voir la culture de cultures comme les oignons, les piments et les grains."},
+{"name": "Community Projects", "type": "Expérience culturelle", "rating": 4.2, "description": "Initiatives de tourisme communautaire présentant la vie et les traditions locales."},
+{"name": "Historical Sites", "type": "Site archéologique", "rating": 4.1, "description": "Divers sites historiques reflétant le patrimoine culturel diversifié de la région."}
+],
+"Yala": [
+{"name": "Yala National Park", "type": "Parc national", "rating": 4.8, "description": "Le parc faunique le plus célèbre du Sri Lanka pour les observations de léopards et d'éléphants, écosystèmes divers."},
+{"name": "Sithulpawwa Rajamaha Viharaya", "type": "Monastère bouddhiste", "rating": 4.4, "description": "Temple rocheux ancien avec une signification archéologique et des grottes de méditation."},
+{"name": "Kumana National Park", "type": "Parc national", "rating": 4.6, "description": "Paradis des ornithologues adjacent à Yala, connu pour les oiseaux migrateurs et les lagunes."},
+{"name": "Patangala", "type": "Site archéologique", "rating": 4.2, "description": "Complexe de grottes ancien avec des inscriptions en brahmi et une importance archéologique."},
+{"name": "Yala Safari Experience", "type": "Safari de faune sauvage", "rating": 4.7, "description": "Safaris en jeep pour repérer des léopards, des éléphants, des ours paresseux et une faune diversifiée."},
+{"name": "Yala Village", "type": "Village local", "rating": 4.0, "description": "Expérimentez la culture locale et la vie sri-lankaise traditionnelle dans les villages voisins."},
+{"name": "Yala Beach", "type": "Plage", "rating": 4.3, "description": "Plage immaculée dans le parc national de Yala avec des tortues nichant."},
+{"name": "Buttala", "type": "Ville", "rating": 3.9, "description": "Ville voisine avec des marchés locaux, des temples et des sites culturels."},
+{"name": "Magul Maha Viharaya", "type": "Temple bouddhiste", "rating": 4.2, "description": "Temple ancien censé être l'endroit où le roi Kavantissa a épousé la princesse Viharamahadevi."},
+{"name": "Wildlife Photography", "type": "Photographie", "rating": 4.6, "description": "Excellentes opportunités de photographie de faune avec des guides professionnels."}
+],
+"Udawalawe": [
+{"name": "Udawalawe National Park", "type": "Parc national", "rating": 4.7, "description": "Meilleur endroit au Sri Lanka pour voir des éléphants en grands troupeaux, également habitat d'autres animaux sauvages."},
+{"name": "Udawalawe Elephant Transit Home", "type": "Centre de conservation", "rating": 4.6, "description": "Orphelinat d'éléphants où les bébés éléphants sont soignés avant leur libération dans la nature."},
+{"name": "Udawalawe Reservoir", "type": "Réservoir", "rating": 4.4, "description": "Grand réservoir d'irrigation attirant des oiseaux et de la faune, vues scéniques."},
+{"name": "Safari Tours", "type": "Safari de faune sauvage", "rating": 4.7, "description": "Safaris en jeep à travers le parc national pour voir des éléphants, des oiseaux et d'autres animaux."},
+{"name": "Birdwatching", "type": "Sanctuaire d'oiseaux", "rating": 4.5, "description": "Excellente observation d'oiseaux avec plus de 200 espèces d'oiseaux, dont beaucoup endémiques."},
+{"name": "Elephant Feeding", "type": "Expérience de faune sauvage", "rating": 4.3, "description": "Observez les heures d'alimentation à l'orphelinat d'éléphants (3 fois par jour)."},
+{"name": "Butterfly Park", "type": "Parc", "rating": 4.1, "description": "Parc présentant les diverses espèces de papillons du Sri Lanka et leurs cycles de vie."},
+{"name": "Local Villages", "type": "Expérience culturelle", "rating": 4.2, "description": "Visitez des villages traditionnels pour voir la vie rurale sri-lankaise et l'agriculture."},
+{"name": "Scenic Drives", "type": "Route scénique", "rating": 4.3, "description": "Belles promenades à travers les paysages ruraux et les vues sur le réservoir."},
+{"name": "Conservation Education", "type": "Éducatif", "rating": 4.4, "description": "Programmes éducatifs sur la conservation des éléphants et la protection de la faune sauvage."}
+],
+"Wilpattu": [
+{"name": "Wilpattu National Park", "type": "Parc national", "rating": 4.7, "description": "Plus grand parc national du Sri Lanka connu pour ses lacs naturels (villus) et les observations de léopards."},
+{"name": "Safari Tours", "type": "Safari de faune sauvage", "rating": 4.6, "description": "Safaris en jeep d'une journée pour explorer des habitats divers et repérer la faune sauvage."},
+{"name": "Leopard Tracking", "type": "Expérience de faune sauvage", "rating": 4.5, "description": "Tours spécialisés axés sur les observations de léopards et l'observation de leur comportement."},
+{"name": "Birdwatching", "type": "Sanctuaire d'oiseaux", "rating": 4.4, "description": "Plus de 200 espèces d'oiseaux y compris beaucoup de migrateurs et endémiques."},
+{"name": "Natural Lakes (Villus)", "type": "Lacs", "rating": 4.3, "description": "Lacs naturels caractéristiques qui donnent à Wilpattu son nom (Terre des Lacs)."},
+{"name": "Kudiramalai Point", "type": "Site historique", "rating": 4.2, "description": "Site historique avec une signification archéologique et des vues sur l'océan."},
+{"name": "Ancient Ruins", "type": "Site archéologique", "rating": 4.1, "description": "Vestiges de civilisations anciennes dans les limites du parc."},
+{"name": "Wildlife Photography", "type": "Photographie", "rating": 4.6, "description": "Excellentes opportunités de photographie de faune et de paysages."},
+{"name": "Camping", "type": "Camping", "rating": 4.3, "description": "Expériences de camping faunique dans des zones désignées du parc."},
+{"name": "Conservation Areas", "type": "Conservation", "rating": 4.4, "description": "Zones protégées présentant l'engagement du Sri Lanka pour la conservation de la faune sauvage."}
+],
+"Kitulgala": [
+{"name": "White Water Rafting", "type": "Sports d'aventure", "rating": 4.7, "description": "Meilleur rafting en eau vive du Sri Lanka sur la rivière Kelani avec des rapides de grade 2-3."},
+{"name": "Belilena Cave", "type": "Grotte", "rating": 4.4, "description": "Grotte archéologique où des restes humains vieux de 12 000 ans ont été découverts."},
+{"name": "Kitulgala Forest Reserve", "type": "Réserve forestière", "rating": 4.5, "description": "Zone de forêt tropicale magnifique avec des sentiers de randonnée et une biodiversité."},
+{"name": "The Bridge on the River Kwai", "type": "Lieu de tournage de film", "rating": 4.3, "description": "Lieu où le film de 1957 a été tourné, bien que le pont ait été détruit pour le film."},
+{"name": "Waterfall Abseiling", "type": "Sports d'aventure", "rating": 4.6, "description": "Descente en rappel le long de chutes d'eau dans les zones de jungle environnantes."},
+{"name": "Jungle Trekking", "type": "Sentier de randonnée", "rating": 4.4, "description": "Randonnées guidées à travers la forêt tropicale pour voir la faune et les chutes d'eau."},
+{"name": "Birdwatching", "type": "Sanctuaire d'oiseaux", "rating": 4.3, "description": "Excellente observation d'oiseaux avec de nombreuses espèces endémiques du Sri Lanka."},
+{"name": "Canyoning", "type": "Sports d'aventure", "rating": 4.5, "description": "Aventures de canyoning combinant escalade, natation et sauts."},
+{"name": "Kayaking", "type": "Sport nautique", "rating": 4.4, "description": "Kayak sur la rivière Kelani à travers des gorges scéniques et des rapides."},
+{"name": "Camping", "type": "Camping", "rating": 4.3, "description": "Expériences de camping en bord de rivière avec des feux de camp et une immersion dans la nature."}
+],
+"Ratnapura": [
+{"name": "Gem Mines", "type": "Mine", "rating": 4.5, "description": "Visitez des mines de gemmes en activité pour voir l'extraction de pierres précieuses y compris des saphirs et des rubis."},
+{"name": "Gemological Museum", "type": "Musée", "rating": 4.3, "description": "Musée présentant l'industrie des gemmes du Sri Lanka, l'histoire et les pierres précieuses."},
+{"name": "Sinharaja Forest Reserve", "type": "Réserve forestière", "rating": 4.7, "description": "Site du patrimoine mondial de l'UNESCO, point chaud de biodiversité avec des espèces endémiques."},
+{"name": "Bopath Falls", "type": "Chute d'eau", "rating": 4.4, "description": "Chute d'eau en forme de feuille de Bo (figuier sacré), haute de 30 m avec une piscine pour nager."},
+{"name": "Ratnapura Market", "type": "Marché", "rating": 4.2, "description": "Marché de gemmes célèbre où les commerçants achètent et vendent des pierres précieuses."},
+{"name": "Mahaweli River", "type": "Rivière", "rating": 4.1, "description": "Plus longue rivière du Sri Lanka, spots scéniques pour des pique-niques et des bains de rivière."},
+{"name": "Gem Cutting Workshops", "type": "Atelier", "rating": 4.3, "description": "Voir les techniques traditionnelles de coupe et de polissage de gemmes par des artisans qualifiés."},
+{"name": "Ancient Temples", "type": "Temple bouddhiste", "rating": 4.2, "description": "Plusieurs temples anciens dans et autour de Ratnapura avec une signification historique."},
+{"name": "Tea Estates", "type": "Plantation", "rating": 4.3, "description": "Plantations de thé dans les collines environnantes produisant un thé de basse altitude de qualité."},
+{"name": "Agricultural Farms", "type": "Ferme", "rating": 4.1, "description": "Fermes produisant des épices, des fruits et des légumes dans la fertile région de Ratnapura."}
+],
+"Kalutara": [
+{"name": "Kalutara Bodhiya", "type": "Temple bouddhiste", "rating": 4.4, "description": "Arbre Bodhi sacré et complexe de temple avec une belle stupa blanche."},
+{"name": "Kalutara Beach", "type": "Plage", "rating": 4.3, "description": "Longue plage de sable populaire pour la natation, les vues sur le coucher du soleil et les sports nautiques."},
+{"name": "Richmond Castle", "type": "Maison historique", "rating": 4.2, "description": "Manoir colonial construit en 1896, maintenant centre culturel avec des jardins."},
+{"name": "Kalu Ganga River", "type": "Rivière", "rating": 4.1, "description": "Promenades et expériences de pêche sur la rivière éponyme de Kalutara."},
+{"name": "Fa Hien Cave", "type": "Grotte", "rating": 4.3, "description": "Grotte archéologique où des restes d'humains préhistoriques ont été découverts."},
+{"name": "Kalutara Temple", "type": "Temple bouddhiste", "rating": 4.2, "description": "Stupa creuse contenant une plus petite stupa à l'intérieur, caractéristique architecturale unique."},
+{"name": "Water Sports", "type": "Sports d'aventure", "rating": 4.3, "description": "Jet ski, promenades en banane et autres activités de plage."},
+{"name": "Local Markets", "type": "Marché", "rating": 4.0, "description": "Marchés vendant des fruits de mer frais, des produits locaux et des artisanats."},
+{"name": "Sunset Cruises", "type": "Tour en bateau", "rating": 4.4, "description": "Promenades en bateau sur la rivière Kalu Ganga pendant les heures du coucher du soleil."},
+{"name": "Garden Restaurants", "type": "Restauration", "rating": 4.2, "description": "Restaurants en bord de rivière et de jardin servant des fruits de mer frais et une cuisine locale."}
+],
+"Beruwala": [
+{"name": "Beruwala Beach", "type": "Plage", "rating": 4.4, "description": "Longue plage dorée avec des eaux calmes, populaire pour la natation et les vacances en famille."},
+{"name": "Kande Viharaya", "type": "Temple bouddhiste", "rating": 4.5, "description": "Temple avec une immense statue de Bouddha debout, site bouddhiste important."},
+{"name": "Barberyn Lighthouse", "type": "Phare", "rating": 4.3, "description": "Phare historique sur une petite île, accessible pendant la marée basse."},
+{"name": "Masjid-ul-Abrar", "type": "Mosquée", "rating": 4.2, "description": "L'une des plus anciennes mosquées du Sri Lanka, construite par des commerçants arabes en 920 apr. J.-C."},
+{"name": "Water Sports Center", "type": "Sports d'aventure", "rating": 4.3, "description": "Diverses activités aquatiques y compris jet ski, parasailing et promenades en bateau."},
+{"name": "Moragalla Beach", "type": "Plage", "rating": 4.4, "description": "Section de plage moins bondée avec du sable immaculé et une eau claire."},
+{"name": "Traditional Fishing", "type": "Expérience culturelle", "rating": 4.2, "description": "Observez la pêche traditionnelle sur pilotis et les techniques de pêche locales."},
+{"name": "Spice Garden Tours", "type": "Jardin", "rating": 4.1, "description": "Tours éducatifs des jardins d'épices présentant les épices du Sri Lanka."},
+{"name": "Beach Resorts", "type": "Hébergement", "rating": 4.3, "description": "Gamme de résorts en bord de mer avec des commodités et des vues sur l'océan."},
+{"name": "Local Crafts", "type": "Shopping", "rating": 4.0, "description": "Achetez des artisanats sri-lankais traditionnels, du batik et des souvenirs."}
+],
+"Chilaw": [
+{"name": "Munneswaram Temple", "type": "Temple hindou", "rating": 4.5, "description": "Important complexe de temple hindou dédié au seigneur Shiva, site de pèlerinage."},
+{"name": "Chilaw Beach", "type": "Plage", "rating": 4.2, "description": "Plage de pêche avec des bateaux colorés, des fruits de mer frais et une atmosphère locale."},
+{"name": "St. Mary's Church", "type": "Église", "rating": 4.1, "description": "Église historique avec une belle architecture et une signification religieuse."},
+{"name": "Chilaw Fishing Harbor", "type": "Port", "rating": 4.0, "description": "Port de pêche actif où la pêche quotidienne est amenée et mise aux enchères."},
+{"name": "Anawilundawa Bird Sanctuary", "type": "Sanctuaire d'oiseaux", "rating": 4.4, "description": "Site Ramsar de zone humide avec une vie aviaire diversifiée y compris des espèces migratrices."},
+{"name": "Dutch Church", "type": "Église", "rating": 4.0, "description": "Vestiges d'église coloniale hollandaise avec une signification historique."},
+{"name": "Crab Farming", "type": "Aquaculture", "rating": 4.2, "description": "Visitez des fermes de crabes pour voir la culture et la transformation des crabes de boue."},
+{"name": "Local Cuisine", "type": "Restauration", "rating": 4.3, "description": "Restaurants de fruits de mer frais spécialisés dans les plats de crabe et de poisson."},
+{"name": "Traditional Industries", "type": "Expérience culturelle", "rating": 4.1, "description": "Voyez des industries traditionnelles comme la fabrication de cordes de noix de coco et le tissage de filets de pêche."},
+{"name": "Paddy Fields", "type": "Paysage agricole", "rating": 4.2, "description": "Vastes champs de riz entourant Chilaw, zone importante de culture de riz."}
+],
+"Puttalam": [
+{"name": "Puttalam Lagoon", "type": "Lagune", "rating": 4.3, "description": "Système étendu de lagunes avec des forêts de mangroves et des opportunités d'observation d'oiseaux."},
+{"name": "Kalpitiya Beach", "type": "Plage", "rating": 4.5, "description": "Longue plage de sable populaire pour le kitesurf, la planche à voile et l'observation des dauphins."},
+{"name": "Wilpattu National Park", "type": "Parc national", "rating": 4.6, "description": "Accès au plus grand parc national du Sri Lanka du côté de Puttalam."},
+{"name": "Dutch Canal", "type": "Canal", "rating": 4.1, "description": "Canal historique construit par les Hollandais reliant Puttalam à Colombo."},
+{"name": "St. Anne's Church", "type": "Église", "rating": 4.2, "description": "Église historique à Talawila, important site de pèlerinage catholique."},
+{"name": "Kitesurfing Centers", "type": "Sports d'aventure", "rating": 4.5, "description": "Écoles de kitesurf professionnelles et locations d'équipement à Kalpitiya."},
+{"name": "Dolphin Watching", "type": "Tour de faune sauvage", "rating": 4.4, "description": "Tours en bateau pour voir de grands bancs de dauphins dans les eaux de Kalpitiya."},
+{"name": "Salt Pans", "type": "Industrie", "rating": 4.1, "description": "Production traditionnelle de sel utilisant des étangs d'évaporation, industrie locale importante."},
+{"name": "Mangrove Forests", "type": "Forêt", "rating": 4.2, "description": "Tours en bateau à travers les écosystèmes de mangroves avec une flore et une faune diversifiées."},
+{"name": "Fishing Villages", "type": "Expérience culturelle", "rating": 4.1, "description": "Visitez des communautés de pêche traditionnelles le long de la côte de Puttalam."}
+],
+"Matara": [
+{"name": "Star Fort", "type": "Fort", "rating": 4.3, "description": "Fort hollandais en forme d'étoile unique construit en 1765, abritant maintenant un musée."},
+{"name": "Matara Paravi Duwa Temple", "type": "Temple bouddhiste", "rating": 4.2, "description": "Temple sur une petite île reliée par un pont, cadre pittoresque."},
+{"name": "Polhena Beach", "type": "Plage", "rating": 4.4, "description": "Plage abritée avec un récif corallien, idéale pour la plongée en apnée et la natation sûre."},
+{"name": "Weherahena Temple", "type": "Temple bouddhiste", "rating": 4.5, "description": "Temple unique avec un tunnel dépeignant les scènes bouddhistes de l'enfer et du paradis."},
+{"name": "Matara Beach", "type": "Plage", "rating": 4.3, "description": "Zone principale de plage avec une promenade, des restaurants et des vues sur le coucher du soleil."},
+{"name": "Dutch Reformed Church", "type": "Église", "rating": 4.1, "description": "Église hollandaise historique construite en 1706, encore en usage aujourd'hui."},
+{"name": "Nilwala River", "type": "Rivière", "rating": 4.2, "description": "Promenades et promenades en bateau sur la principale rivière de Matara."},
+{"name": "Local Markets", "type": "Marché", "rating": 4.0, "description": "Marchés vibrants vendant des produits frais, des fruits de mer et des biens locaux."},
+{"name": "Historical Museum", "type": "Musée", "rating": 4.1, "description": "Musée présentant l'histoire et le patrimoine culturel de Matara."},
+{"name": "Dondra Lighthouse", "type": "Phare", "rating": 4.2, "description": "Point le plus au sud du Sri Lanka avec un phare et des vues sur l'océan."}
+],
+"Hambantota": [
+{"name": "Yala National Park", "type": "Parc national", "rating": 4.7, "description": "Accès au célèbre parc national de Yala du côté de Hambantota."},
+{"name": "Hambantota Port", "type": "Port", "rating": 4.1, "description": "Port en eau profonde construit avec l'aide chinoise, merveille d'ingénierie."},
+{"name": "Mattala Rajapaksa International Airport", "type": "Aéroport", "rating": 4.0, "description": "Deuxième aéroport international du Sri Lanka, architecture intéressante."},
+{"name": "Bundala National Park", "type": "Parc national", "rating": 4.4, "description": "Site Ramsar de zone humide important pour les oiseaux migrateurs et la faune sauvage."},
+{"name": "Hambantota Cricket Stadium", "type": "Lieu de sport", "rating": 4.2, "description": "Stade de cricket international accueillant des matchs majeurs."},
+{"name": "Bird Sanctuary", "type": "Sanctuaire d'oiseaux", "rating": 4.3, "description": "Zone importante pour l'observation d'oiseaux, surtout les espèces de zones humides."},
+{"name": "Salt Pans", "type": "Industrie", "rating": 4.1, "description": "Production traditionnelle de sel utilisant l'évaporation naturelle."},
+{"name": "Local Fisheries", "type": "Industrie", "rating": 4.0, "description": "Industrie de la pêche et marchés de fruits de mer frais."},
+{"name": "Development Projects", "type": "Infrastructure moderne", "rating": 4.1, "description": "Voyez le développement d'infrastructure moderne dans la région de Hambantota."},
+{"name": "Rural Villages", "type": "Expérience culturelle", "rating": 4.2, "description": "Vie villageoise traditionnelle dans le sud du Sri Lanka."}
+],
+"Ampara": [
+{"name": "Lahugala National Park", "type": "Parc national", "rating": 4.3, "description": "Sanctuaire d'éléphants avec des trous d'eau naturels et de la faune sauvage."},
+{"name": "Deegawapiya Temple", "type": "Temple bouddhiste", "rating": 4.4, "description": "Temple ancien censé avoir été visité par le Seigneur Bouddha."},
+{"name": "Ampara Tank", "type": "Réservoir", "rating": 4.1, "description": "Grand réservoir d'irrigation soutenant l'agriculture dans la zone sèche."},
+{"name": "Gal Oya National Park", "type": "Parc national", "rating": 4.4, "description": "Safaris en bateau pour voir des éléphants nager entre les îles."},
+{"name": "Senanayake Samudraya", "type": "Réservoir", "rating": 4.3, "description": "Plus grand réservoir du Sri Lanka, scénique et important pour l'irrigation."},
+{"name": "Ancient Buddhist Sites", "type": "Site archéologique", "rating": 4.2, "description": "Plusieurs monastères bouddhistes anciens et ruines dans le district d'Ampara."},
+{"name": "Agriculture Farms", "type": "Ferme", "rating": 4.1, "description": "Visitez des fermes cultivant du riz, des légumes et des fruits dans la fertile région d'Ampara."},
+{"name": "Local Markets", "type": "Marché", "rating": 4.0, "description": "Marchés servant les communautés agricoles dans l'est du Sri Lanka."},
+{"name": "Traditional Crafts", "type": "Artisanat", "rating": 4.1, "description": "Artisanats locaux y compris la poterie, le tissage et le travail du bois."},
+{"name": "Cultural Diversity", "type": "Expérience culturelle", "rating": 4.2, "description": "Expérimentez une société multiculturelle avec des communautés sinhalaise, tamoule et musulmane."}
+],
+"Monaragala": [
+{"name": "Maligawila Buddha Statue", "type": "Statue bouddhiste", "rating": 4.4, "description": "Ancienne statue de Bouddha debout du VIIe siècle, haute de 11,5 m."},
+{"name": "Buddhangala Monastery", "type": "Monastère bouddhiste", "rating": 4.3, "description": "Monastère forestier ancien avec des restes archéologiques et des opportunités de méditation."},
+{"name": "Monaragala Town", "type": "Ville", "rating": 4.0, "description": "Ville principale servant la région sud-est avec des marchés locaux et des services."},
+{"name": "Agricultural Areas", "type": "Paysage agricole", "rating": 4.1, "description": "Vastes terres agricoles cultivant du riz, des fruits et des légumes."},
+{"name": "Traditional Villages", "type": "Expérience culturelle", "rating": 4.2, "description": "Visitez des villages traditionnels pour voir la vie rurale sri-lankaise."},
+{"name": "Natural Springs", "type": "Sources naturelles", "rating": 4.1, "description": "Sources d'eau douce naturelles utilisées par les communautés locales."},
+{"name": "Forest Areas", "type": "Forêt", "rating": 4.2, "description": "Forêts de zone sèche avec des opportunités de randonnée et de faune sauvage."},
+{"name": "Local Crafts", "type": "Artisanat", "rating": 4.0, "description": "Artisanats traditionnels y compris la poterie, le tissage de paniers et la sculpture sur bois."},
+{"name": "Agricultural Markets", "type": "Marché", "rating": 4.1, "description": "Marchés vendant des produits agricoles de la région de Monaragala."},
+{"name": "Rural Tourism", "type": "Expérience culturelle", "rating": 4.2, "description": "Initiatives de tourisme communautaire présentant la culture locale."}
+],
+"Kurunegala": [
+{"name": "Ethagala (Elephant Rock)", "type": "Formation rocheuse", "rating": 4.3, "description": "Grande formation rocheuse ressemblant à un éléphant, landmark de Kurunegala."},
+{"name": "Yapahuwa Rock Fortress", "type": "Site archéologique", "rating": 4.5, "description": "Ancienne forteresse rocheuse et palais avec un escalier impressionnant et une architecture."},
+{"name": "Panduwasnuwara", "type": "Site archéologique", "rating": 4.2, "description": "Ancienne capitale avec des ruines, un site de palais et des monuments bouddhistes."},
+{"name": "Kurunegala Lake", "type": "Lac", "rating": 4.1, "description": "Lac artificiel au centre de la ville avec des sentiers de promenade et des jardins."},
+{"name": "Ridi Viharaya", "type": "Temple bouddhiste", "rating": 4.4, "description": "Complexe de temple ancien avec des dépôts d'argent, historiquement significatif."},
+{"name": "Arankele Monastery", "type": "Monastère bouddhiste", "rating": 4.3, "description": "Monastère forestier avec des grottes de méditation et des ruines anciennes."},
+{"name": "Local Markets", "type": "Marché", "rating": 4.0, "description": "Marchés animés servant la province du nord-ouest avec des biens divers."},
+{"name": "Agriculture", "type": "Paysage agricole", "rating": 4.1, "description": "Visitez des fermes cultivant du riz, de la noix de coco et des fruits dans la région fertile."},
+{"name": "Historical Sites", "type": "Site archéologique", "rating": 4.2, "description": "Plusieurs sites historiques reflétant l'importance ancienne de Kurunegala."},
+{"name": "Temple Circuit", "type": "Tour religieux", "rating": 4.3, "description": "Tour des temples bouddhistes importants dans et autour de Kurunegala."}
+],
+"Kegalle": [
+{"name": "Pinnawala Elephant Orphanage", "type": "Centre de conservation", "rating": 4.6, "description": "Le plus grand troupeau captif d'éléphants au monde, célèbre pour les bains et les heures d'alimentation des éléphants."},
+{"name": "Elephant Bathing", "type": "Expérience de faune sauvage", "rating": 4.7, "description": "Regardez les éléphants se baigner dans la rivière aux heures programmées, opportunité photo populaire."},
+{"name": "Millennium Elephant Foundation", "type": "Centre de conservation", "rating": 4.4, "description": "Organisation de conservation et de bien-être des éléphants offrant des programmes éducatifs."},
+{"name": "Kegalle Town", "type": "Ville", "rating": 4.0, "description": "Ville servant la province centrale avec des marchés locaux et des services."},
+{"name": "Spice Gardens", "type": "Jardin", "rating": 4.2, "description": "Tours éducatifs des jardins d'épices présentant les épices du Sri Lanka."},
+{"name": "Traditional Industries", "type": "Expérience culturelle", "rating": 4.1, "description": "Voyez des industries traditionnelles comme la mine de gemmes et l'agriculture."},
+{"name": "Elephant Back Rides", "type": "Expérience de faune sauvage", "rating": 4.3, "description": "Promenades éthiques à dos d'éléphant à travers des zones désignées."},
+{"name": "Local Markets", "type": "Marché", "rating": 4.0, "description": "Marchés vendant des produits locaux, des épices et des artisanats."},
+{"name": "Rubber Plantations", "type": "Plantation", "rating": 4.1, "description": "Visitez des plantations de caoutchouc pour voir la collecte et la transformation du latex."},
+{"name": "Scenic Countryside", "type": "Route scénique", "rating": 4.2, "description": "Belles promenades à travers la campagne vallonnée de Kegalle et les plantations."}
+],
+"Matale": [
+{"name": "Aluvihara Rock Temple", "type": "Temple bouddhiste", "rating": 4.4, "description": "Temple en grotte ancien où les écritures bouddhistes ont été écrites pour la première fois sur des feuilles de palmier."},
+{"name": "Matale Spice Gardens", "type": "Jardin", "rating": 4.3, "description": "Tours éducatifs des jardins d'épices dans la capitale des épices du Sri Lanka."},
+{"name": "Sri Muthumariamman Temple", "type": "Temple hindou", "rating": 4.2, "description": "Temple hindou coloré avec une architecture impressionnante et des festivals."},
+{"name": "Knuckles Mountain Range", "type": "Chaîne de montagnes", "rating": 4.6, "description": "Site du patrimoine mondial de l'UNESCO avec randonnée, chutes d'eau et biodiversité."},
+{"name": "Riverston", "type": "Point de vue", "rating": 4.5, "description": "Point de vue spectaculaire dans la chaîne des Knuckles avec des vues panoramiques sur les montagnes."},
+{"name": "Matale Market", "type": "Marché", "rating": 4.1, "description": "Marché d'épices célèbre avec une grande variété d'épices et d'herbes fraîches."},
+{"name": "Ancient Temples", "type": "Temple bouddhiste", "rating": 4.2, "description": "Plusieurs temples bouddhistes anciens dans et autour de Matale."},
+{"name": "Spice Processing", "type": "Industrie", "rating": 4.2, "description": "Voyez les méthodes traditionnelles de transformation et d'emballage des épices."},
+{"name": "Hiking Trails", "type": "Sentier de randonnée", "rating": 4.4, "description": "Divers sentiers de randonnée dans la chaîne des Knuckles pour différents niveaux de forme physique."},
+{"name": "Cultural Diversity", "type": "Expérience culturelle", "rating": 4.1, "description": "Expérimentez une société multiculturelle avec des communautés bouddhiste, hindoue et musulmane."}
+],
+"Weligama": [
+{"name": "Weligama Beach", "type": "Plage", "rating": 4.5, "description": "Longue plage de sable célèbre pour le surf, les pêcheurs sur pilotis et l'observation des baleines."},
+{"name": "Stilt Fishermen", "type": "Expérience culturelle", "rating": 4.4, "description": "Méthode de pêche traditionnelle emblématique unique à la zone de Weligama."},
+{"name": "Surfing Lessons", "type": "Leçons de surf", "rating": 4.6, "description": "Écoles de surf offrant des leçons pour débutants dans des vagues douces."},
+{"name": "Taprobane Island", "type": "Île", "rating": 4.3, "description": "Île privée avec une villa de luxe, accessible pendant la marée basse."},
+{"name": "Whale Watching", "type": "Tour de faune sauvage", "rating": 4.5, "description": "Tours en bateau pour voir des baleines bleues et des dauphins depuis le port de Weligama."},
+{"name": "Polhena Beach", "type": "Plage", "rating": 4.4, "description": "Plage abritée avec un récif corallien, idéale pour la plongée en apnée et la natation sûre."},
+{"name": "Local Markets", "type": "Marché", "rating": 4.1, "description": "Marchés vendant des fruits de mer frais, des produits locaux et des artisanats."},
+{"name": "Beachfront Restaurants", "type": "Restauration", "rating": 4.3, "description": "Restaurants servant des fruits de mer frais avec des vues sur l'océan."},
+{"name": "Water Sports", "type": "Sports d'aventure", "rating": 4.2, "description": "Diverses activités aquatiques y compris kayak et paddle boarding."},
+{"name": "Sunset Views", "type": "Point de vue", "rating": 4.5, "description": "Beaux couchers de soleil sur l'océan Indien depuis la plage de Weligama."}
+]
+}
+      
+        if city in fallback_places:
+            places = fallback_places[city]
+  
+    # Mettre en cache les résultats
+    st.session_state.places_cache[cache_key] = places
+    return places
+
+# Fonction pour extraire la ville du titre du jour
+def extract_city_from_title(title):
+    """Extraire la ville principale du titre du jour"""
+    title_lower = title.lower()
+    city_mappings = {
+        "colombo": "Colombo",
+        "kandy": "Kandy",
+        "nuwara eliya": "Nuwara Eliya",
+        "nuwaraeliya": "Nuwara Eliya",
+        "ella": "Ella",
+        "yala": "Yala",
+        "galle": "Galle",
+        "sigiriya": "Sigiriya",
+        "polonnaruwa": "Polonnaruwa",
+        "anuradhapura": "Anuradhapura",
+        "bentota": "Bentota",
+        "mirissa": "Mirissa",
+        "trincomalee": "Trincomalee",
+        "trinco": "Trincomalee",
+        "jaffna": "Jaffna",
+        "dambulla": "Dambulla",
+        "hikkaduwa": "Hikkaduwa",
+        "arugam bay": "Arugam Bay",
+        "arugambay": "Arugam Bay",
+        "negombo": "Negombo",
+        "batticaloa": "Batticaloa",
+        "batti": "Batticaloa",
+        "pasikudah": "Pasikudah",
+        "weligama": "Weligama",
+        "tangalle": "Tangalle",
+        "badulla": "Badulla",
+        "bandarawela": "Bandarawela",
+        "hatton": "Hatton",
+        "matara": "Matara",
+        "hambantota": "Hambantota",
+        "kalutara": "Kalutara",
+        "beruwala": "Beruwala",
+        "chilaw": "Chilaw",
+        "puttalam": "Puttalam",
+        "ratnapura": "Ratnapura",
+        "kitulgala": "Kitulgala",
+        "kegalle": "Kegalle",
+        "kurunegala": "Kurunegala",
+        "matale": "Matale",
+        "monaragala": "Monaragala",
+        "ampara": "Ampara",
+        "vavuniya": "Vavuniya",
+        "mannar": "Mannar",
+        "udawalawe": "Udawalawe",
+        "wilpattu": "Wilpattu"
+    }
+    for key, city in city_mappings.items():
+        if key in title_lower:
+            return city
+    return None
+
+# Fonction pour récupérer les lieux quotidiens
+def get_daily_places(day_number, city, country, num_places=3):
+    """Récupérer des lieux réels pour un jour spécifique"""
+    all_places = get_real_places(city, country, limit=20)
+  
+    if not all_places:
+        return []
+  
+    # Sélectionner des lieux différents pour chaque jour
+    start_idx = (day_number - 1) * num_places
+    selected_places = []
+  
+    for i in range(num_places):
+        idx = (start_idx + i) % len(all_places)
+        place = all_places[idx].copy()
+      
+        # Ajouter des informations supplémentaires
+        best_times = [
+            "Matin 9H-12H (Meilleur pour les photos)",
+            "Après-midi 14H-17H (Éviter les foules)",
+            "Soirée 18H-21H (Beaux couchers de soleil)"
+        ]
+      
+        durations = ["2-3 heures", "3-4 heures", "1-2 heures"]
+      
+        # Associer les types de lieux aux icônes
+        icon_map = {
+            "Buddhist Temple": "🛕", "Hindu Temple": "🛕", "Mosque": "🕌", "Church": "⛪",
+            "Temple": "🛕", "Park": "🏞️", "Museum": "🏛️", "Historic": "🏛️",
+            "Market": "🛍️", "Beach": "🏖️", "Palace": "🏰", "Castle": "🏰",
+            "Viewpoint": "🌄", "Garden": "🌿", "Lake": "🌊", "Statue": "🗽",
+            "Fort": "🏯", "Shopping": "🛒", "Cathedral": "⛪", "Shrine": "⛩️",
+            "Religious": "🕌", "Natural": "🌲", "Architecture": "🏢", "Attraction": "📍",
+            "Bridge": "🌉", "Hiking Trail": "🥾", "Waterfall": "🌊", "Plantation": "🍵",
+            "Lagoon": "🏝️", "Island": "🏝️", "Lighthouse": "🗼", "Forest Reserve": "🌳",
+            "National Park": "🐘", "Wildlife Safari": "🐅", "Conservation Center": "🐘",
+            "Archaeological Site": "🏺", "Ancient Structure": "🏛️", "Monument": "🗽",
+            "Mountain": "⛰️", "River": "🌊", "Cave": "🕳️", "Hot Springs": "♨️",
+            "Reservoir": "💧", "Wetland": "🌿", "Bird Sanctuary": "🦅", "Marine Sanctuary": "🐠",
+            "Adventure Sports": "🏄", "Surf Spot": "🏄", "Boat Tour": "🚤", "Cultural Show": "🎭",
+            "Workshop": "🔨", "Farm": "🚜", "Tea Factory": "🍵", "Mine": "⛏️",
+            "Golf Course": "⛳", "Sports Venue": "🏟️", "Airport": "✈️", "Port": "🚢",
+            "Town": "🏙️", "Village": "🏡", "Historical House": "🏚️", "Film Location": "🎬",
+            "Camping": "🏕️", "Scenic Route": "🛣️", "Modern Infrastructure": "🏗️",
+            "Accommodation": "🏨", "Dining": "🍽️", "Nightlife": "🍸", "Shopping": "🛍️",
+            "Cultural Experience": "🎎", "Educational": "📚", "Photography": "📷",
+            "Pilgrimage Site": "🙏", "Religious Tour": "🛐", "Rural Tourism": "🌾"
+        }
+      
+        place.update({
+            "best_time": best_times[i % len(best_times)],
+            "duration": durations[i % len(durations)],
+            "icon": icon_map.get(place['type'], "📍"),
+            "tags": [place['type'], "Populaire", "À Visiter"]
+        })
+      
+        selected_places.append(place)
+  
+    return selected_places
+
+# Fonction pour générer un itinéraire complet utilisant l'IA
+def generate_comprehensive_itinerary(email_content):
+    """Générer un itinéraire de voyage complet utilisant l'IA"""
+  
+    # Extraire la destination de l'email
+    destination_prompt = f"""
+    Extraire les informations suivantes de cette demande de voyage :
+    {email_content}
+  
+    Retourner en JSON :
+    {{
+        "destination_country": "string",
+        "destinations": ["string"],
+        "duration_days": number,
+        "travelers": number,
+        "budget": "string",
+        "interests": ["string"],
+        "travel_dates": "string"
+    }}
+    """
+  
+    try:
+        # D'abord, extraire les informations de destination
+        extraction_response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "Extraire les informations de voyage de l'email. Analyser les destinations comme une liste si plusieurs villes sont mentionnées."},
+                {"role": "user", "content": destination_prompt}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.1,
+            max_tokens=500,
+            response_format={"type": "json_object"}
+        )
+      
+        extracted_info = json.loads(extraction_response.choices[0].message.content)
+      
+        country = extracted_info.get("destination_country", "")
+        destinations = extracted_info.get("destinations", [])
+        if not destinations:
+            main_city = extracted_info.get("destination_city", "")
+            if main_city:
+                destinations = [main_city]
+        days = extracted_info.get("duration_days", 5)
+      
+        # Récupérer des lieux réels pour chaque destination
+        places_by_city = {}
+        for dest_city in destinations:
+            places_by_city[dest_city] = get_real_places(dest_city, country, limit=10)
+      
+        # Créer une invite d'itinéraire avec des lieux réels
+        system_prompt = f"""Vous êtes un planificateur de voyage expert avec une connaissance approfondie des destinations mondiales.
+      
+        Créer un itinéraire de voyage multi-villes détaillé et réaliste pour la route {', '.join(destinations)} au {country}.
+      
+        Lieux réels disponibles par ville :
+        {json.dumps(places_by_city, indent=2)}
+      
+        Détails du voyage :
+        - Durée : {days} jours
+        - Voyageurs : {extracted_info.get('travelers', 2)}
+        - Budget : {extracted_info.get('budget', 'Moyen')}
+        - Intérêts : {extracted_info.get('interests', ['Général'])}
+        - Dates : {extracted_info.get('travel_dates', 'Non spécifié')}
+      
+        IMPORTANT : Utiliser les lieux réels listés ci-dessus, en sélectionnant dans la liste appropriée de la ville pour chaque jour. Inclure des détails spécifiques comme :
+        - Horaires d'ouverture
+        - Prix des billets
+        - Meilleurs moments pour visiter
+        - Conseils de transport
+        - Recommandations de nourriture locale
+        - Insights culturels
+      
+        Retourner UNIQUEMENT du JSON valide avec cette structure :
+        {{
+            "trip_summary": {{
+                "destination_country": "{country}",
+                "destinations": {json.dumps(destinations)},
+                "duration_days": {days},
+                "travelers": {extracted_info.get('travelers', 2)},
+                "budget": "{extracted_info.get('budget', 'Moyen')}",
+                "trip_title": "string",
+                "trip_theme": "string",
+                "best_time_to_visit": "string",
+                "currency": "string",
+                "language": "string",
+                "time_zone": "string",
+                "visa_requirements": "string",
+                "vaccinations": "string",
+                "safety_tips": "string",
+                "packing_tips": "string"
+            }},
+            "daily_itinerary": [
+                {{
+                    "day": 1,
+                    "title": "string (inclure le nom de la ville)",
+                    "overview": "string",
+                    "morning": {{
+                        "time": "9:00 AM - 12:00 PM",
+                        "activity": "string (utiliser des noms de lieux réels)",
+                        "description": "description détaillée",
+                        "duration": "3 heures",
+                        "cost": "string",
+                        "transportation": "string",
+                        "tips": "string"
+                    }},
+                    "afternoon": {{...}},
+                    "evening": {{...}},
+                    "accommodation_suggestion": "string",
+                    "food_recommendations": ["string"]
+                }}
+            ],
+            "key_attractions": [
+                {{
+                    "name": "string (doit être de la liste des lieux réels)",
+                    "city": "string (la ville où se trouve cette attraction)",
+                    "type": "string",
+                    "description": "string",
+                    "best_time_to_visit": "string",
+                    "ticket_price": "string",
+                    "opening_hours": "string",
+                    "duration_needed": "string",
+                    "transportation": "string",
+                    "tips": "string"
+                }}
+            ],
+            "local_cuisine": [
+                {{
+                    "dish": "string",
+                    "description": "string",
+                    "where_to_try": "string",
+                    "approximate_cost": "string",
+                    "vegetarian_option": "boolean"
+                }}
+            ],
+            "transportation_guide": {{
+                "airport_transfer": "string",
+                "public_transportation": "string",
+                "taxi_services": "string",
+                "car_rental": "string",
+                "walking_tours": "string",
+                "transportation_tips": ["string"]
+            }},
+            "accommodation_recommendations": [
+                {{
+                    "type": "string (Budget/Milieu de gamme/Luxe)",
+                    "suggestions": ["string"],
+                    "average_price": "string",
+                    "best_locations": ["string"]
+                }}
+            ],
+            "cultural_tips": [
+                "string"
+            ],
+            "budget_breakdown": {{
+                "accommodation": "string",
+                "food": "string",
+                "transportation": "string",
+                "activities": "string",
+                "souvenirs": "string",
+                "miscellaneous": "string",
+                "total_estimate": "string"
+            }},
+            "emergency_information": {{
+                "emergency_number": "string",
+                "police": "string",
+                "ambulance": "string",
+                "tourist_police": "string",
+                "nearest_hospital": "string",
+                "embassy_contact": "string"
+            }},
+            "seasonal_considerations": [
+                "string"
+            ]
+        }}
+      
+        Rendre pratique, détaillé et basé sur des informations touristiques réelles."""
+      
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Créer un itinéraire complet pour ce voyage : {email_content}"}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.3,
+            max_tokens=8000,
+            response_format={"type": "json_object"}
+        )
+      
+        result = response.choices[0].message.content.strip()
+      
+        # Nettoyer JSON
+        if result.startswith("```json"):
+            result = result[7:-3]
+        elif result.startswith("```"):
+            result = result[3:-3]
+      
+        itinerary_data = json.loads(result)
+      
+        # Ajouter des données de lieux réels à l'itinéraire
+        itinerary_data["places_by_city"] = places_by_city
+      
+        return itinerary_data
+      
+    except Exception as e:
+        st.error(f"Erreur lors de la génération de l'itinéraire : {str(e)}")
+        return None
+
+# Fonction pour créer une visualisation cartographique
+def create_places_map(places, city, country):
+    """Créer une carte interactive montrant tous les lieux"""
+    try:
+        # Récupérer les coordonnées de la ville
+        lat, lon = get_city_coordinates(city, country)
+      
+        # Créer la carte
+        m = folium.Map(location=[lat, lon], zoom_start=12, tiles="CartoDB positron")
+      
+        # Ajouter des marqueurs pour chaque lieu
+        for place in places:
+            if "coordinates" in place and place["coordinates"]["lat"] and place["coordinates"]["lon"]:
+                popup_html = f"""
+                <div style="width: 200px;">
+                    <h4 style="margin: 5px 0; color: #3b82f6;">{place['name']}</h4>
+                    <p style="margin: 5px 0; font-size: 12px; color: #666;">
+                        <strong>Type :</strong> {place.get('type', 'Attraction')}<br>
+                        <strong>Note :</strong> {place.get('rating', 'N/A')}/5
+                    </p>
+                </div>
+                """
+              
+                folium.Marker(
+                    location=[place["coordinates"]["lat"], place["coordinates"]["lon"]],
+                    popup=folium.Popup(popup_html, max_width=250),
+                    tooltip=place["name"],
+                    icon=folium.Icon(color="blue", icon="info-sign")
+                ).add_to(m)
+      
+        return m
+    except:
+        return None
+
+# En-tête de l'application avec vue carte transparente
+st.markdown("""
+<div class="header-card">
+    <div class="glow-effect"></div>
+    <div class="header-content">
+        <h1 class="gradient-text" style="font-size: 3.5rem; margin-bottom: 20px;">
+            Assistant de Voyage AI Sri Lanka
+        </h1>
+        <p class="header-subtitle">
+            Créez des itinéraires de voyage authentiques pour le Sri Lanka avec des destinations réelles, des lieux vérifiés et une planification alimentée par l'IA
+        </p>
+        <div class="header-icons">
+            <span class="header-icon">🤖 Alimenté par IA</span>
+            <span class="header-icon">📍 Lieux Réels</span>
+            <span class="header-icon">🎯 Personnalisé</span>
+            <span class="header-icon">⚡ Résultats Instantanés</span>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Barre latérale avec fonctionnalités améliorées
+with st.sidebar:
+    st.markdown("### 🎯 Explorateur du Sri Lanka")
+  
+    # Définir le pays par défaut comme Sri Lanka
+    countries_data = get_all_countries()
+    sri_lanka_data = next((c for c in countries_data if c["name"] == "Sri Lanka"), None)
+  
+    if sri_lanka_data:
+        col_flag, col_info = st.columns([1, 3])
+        with col_flag:
+            st.markdown(f"<div style='font-size: 2.5rem;'>{sri_lanka_data['flag']}</div>", unsafe_allow_html=True)
+        with col_info:
+            st.markdown(f"""
+            <div>
+                <strong style="color: #1e293b;">{sri_lanka_data['name']}</strong><br>
+                <span style="color: #475569; font-size: 0.9rem;">
+                    📍 {sri_lanka_data['capital']}<br>
+                    👥 {sri_lanka_data['population']:,}<br>
+                    🌐 {sri_lanka_data['region']}
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+  
+    # Régions du Sri Lanka
+    st.markdown("### 🗺️ Régions du Sri Lanka")
+  
+    regions = {
+        "🏙️ Province de l'Ouest": ["Colombo", "Negombo", "Kalutara"],
+        "🏞️ Province Centrale": ["Kandy", "Nuwara Eliya", "Matale"],
+        "🏖️ Province du Sud": ["Galle", "Matara", "Hambantota"],
+        "☕ Pays des Collines": ["Ella", "Badulla", "Bandarawela", "Hatton"],
+        "🏛️ Triangle Culturel": ["Sigiriya", "Dambulla", "Polonnaruwa", "Anuradhapura"],
+        "🐘 Faune et Flore": ["Yala", "Udawalawe", "Wilpattu"],
+        "🏄 Aventure": ["Kitulgala", "Arugam Bay", "Weligama"],
+        "🏝️ Paradis des Plages": ["Bentota", "Hikkaduwa", "Mirissa", "Tangalle", "Pasikudah"],
+        "🌅 Côte Est": ["Trincomalee", "Batticaloa"],
+        "🌴 Nord": ["Jaffna", "Mannar", "Vavuniya"]
+    }
+  
+    selected_region = st.selectbox("Choisir une Région", list(regions.keys()))
+  
+    if selected_region:
+        cities_in_region = regions[selected_region]
+        selected_city = st.selectbox("Choisir une Ville", cities_in_region)
+      
+        if st.button("🔍 Explorer la Ville", use_container_width=True):
+            # Récupérer les lieux pour cette ville
+            with st.spinner(f"Recherche de lieux à {selected_city}..."):
+                places = get_real_places(selected_city, "Sri Lanka", limit=10)
+              
+                if places:
+                    st.success(f"Trouvé {len(places)} lieux à {selected_city} !")
+                    for place in places[:3]:
+                        st.markdown(f"""
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 12px; margin: 8px 0; border: 1px solid #e2e8f0;">
+                            <strong style="color: #1e293b;">{place['name']}</strong>
+                            <div style="color: #475569; font-size: 0.85rem;">{place['type']} • ⭐ {place.get('rating', 'N/A')}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+  
+    st.markdown("---")
+  
+    # Modèles rapides
+    st.markdown("### 📋 Modèles d'Itinéraire Sri Lanka")
+  
+    template_options = {
+        "🇱🇰 Sri Lanka Classique 12 Jours": """Planification d'un tour complet de 12 jours au Sri Lanka.
+Dates de voyage : 15-26 décembre 2024
+Voyageurs : 2 adultes
+Budget : 3500$
+Intérêts : Culture, histoire, plages, faune, plantations de thé
+Destinations : Colombo, Sigiriya, Kandy, Nuwara Eliya, Ella, Yala, Galle, Bentota
+Demandes spécifiques :
+- Visiter les sites du patrimoine mondial de l'UNESCO
+- Expérimenter les plantations de thé et visites d'usines
+- Safari faunique dans le parc national de Yala
+- Essayer la cuisine authentique sri-lankaise
+- Prendre le train panoramique de Kandy à Ella
+- Inclure du temps plage à Bentota et Galle
+- Visiter le Temple de la Dent Sacrée
+Hébergement : Mix d'hôtels 4 étoiles et propriétés de charme
+Transport : Voiture privée avec chauffeur pour tout le voyage
+Créer un itinéraire équilibré avec composants culturels, naturels et de détente.""",
+      
+        "🏖️ Vacances Plage Côte Sud 10 Jours": """Planification de vacances plage de 10 jours dans le sud du Sri Lanka.
+Dates de voyage : 10-19 janvier 2025
+Voyageurs : Famille de 4 (2 adultes, 2 enfants de 8 et 12 ans)
+Budget : 4000$
+Intérêts : Plages, sports nautiques, activités familiales, détente
+Destinations : Colombo, Bentota, Hikkaduwa, Mirissa, Galle, Weligama
+Demandes spécifiques :
+- Stations balnéaires adaptées aux familles avec piscines
+- Activités nautiques (snorkeling, jet ski)
+- Visiter le Fort de Galle et l'écloserie de tortues
+- Observation des baleines à Mirissa
+- Plages sécurisées pour les enfants
+- Activités culturelles adaptées aux enfants
+- Options de divertissement en soirée
+Hébergement : Stations balnéaires avec chambres familiales
+Transport : Minibus privé avec chauffeur
+Rythme détendu avec temps plage et activités familiales.""",
+      
+        "🌄 Aventure Pays des Collines 8 Jours": """Planification d'une aventure de 8 jours dans le pays des collines.
+Dates de voyage : 15-22 mars 2025
+Voyageurs : Jeune couple (voyageurs actifs)
+Budget : 2500$
+Intérêts : Randonnée, plantations de thé, cascades, vues panoramiques, photographie
+Destinations : Kandy, Nuwara Eliya, Ella, Hatton, Bandarawela
+Demandes spécifiques :
+- Randonnée jusqu'à Little Adam's Peak et Ella Rock
+- Visiter Horton Plains et World's End
+- Visites de plantations de thé et dégustation
+- Voyages en train panoramiques
+- Visites de cascades (Ravana Falls, St. Clair's Falls)
+- Opportunités de photographie
+- Expériences de villages locaux
+Hébergement : Hôtels de charme et guesthouses
+Transport : Combinaison de train et voiture privée
+Préférer un itinéraire actif avec randonnée modérée.""",
+      
+        "🐘 Faune & Nature 7 Jours": """Planification d'un voyage de 7 jours axé sur la faune.
+Dates de voyage : février 2025
+Voyageurs : 2 passionnés de faune
+Budget : 3000$
+Intérêts : Safaris fauniques, observation d'oiseaux, parcs nationaux, conservation
+Destinations : Colombo, Yala, Udawalawe, Kitulgala, Sinharaja
+Demandes spécifiques :
+- Multiples safaris fauniques (matin et soir)
+- Tours d'observation d'oiseaux
+- Visiter l'orphelinat d'éléphants et la maison de transit
+- Rafting en eau vive à Kitulgala
+- Randonnées guidées en nature
+- Itinéraire axé sur la photographie
+- Visites de projets de conservation
+Hébergement : Lodges fauniques et éco-hôtels
+Transport : Jeeps safari 4x4 et voiture privée
+Maximiser les opportunités d'observation de la faune."""
+    }
+  
+    selected_template = st.selectbox("Choisir un Modèle", list(template_options.keys()))
+  
+    if st.button("📝 Utiliser le Modèle", use_container_width=True):
+        st.session_state.email_text = template_options[selected_template]
+  
+    st.markdown("---")
+  
+    # Statistiques
+    st.markdown("### 📊 Statistiques du Sri Lanka")
+  
+    col_stat1, col_stat2 = st.columns(2)
+    with col_stat1:
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-icon">🏙️</div>
+            <div class="stat-number">35</div>
+            <div class="stat-label">Villes</div>
+        </div>
+        """, unsafe_allow_html=True)
+  
+    with col_stat2:
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-icon">📍</div>
+            <div class="stat-number">350+</div>
+            <div class="stat-label">Attractions</div>
+        </div>
+        """, unsafe_allow_html=True)
+  
+    st.markdown("---")
+  
+    # Paramètres
+    st.markdown("### ⚙️ Paramètres")
+  
+    show_images = st.checkbox("Afficher les Images", value=True)
+    show_map = st.checkbox("Afficher la Carte Interactive", value=True)
+    image_quality = st.select_slider("Qualité d'Image", ["Basse", "Moyenne", "Haute"], value="Moyenne")
+  
+    if st.button("🔄 Vider le Cache", use_container_width=True):
+        st.session_state.image_cache = {}
+        st.session_state.places_cache = {}
+        st.success("Cache vidé !")
+
+# Zone de contenu principale
+col1, col2 = st.columns([2, 1])
+with col1:
+    st.markdown("### 📝 Demande de Voyage")
+  
+    email_text = st.text_area(
+        "Décrivez vos plans de voyage au Sri Lanka en détail :",
+        value=st.session_state.email_text,
+        height=280,
+        placeholder="""🇱🇰 Parlez-nous de votre voyage au Sri Lanka !
+Exemple : Planification d'un tour culturel et balnéaire de 12 jours au Sri Lanka.
+Détails essentiels :
+- Dates de voyage : 15-26 décembre 2024
+- Voyageurs : 2 adultes
+- Budget : 3500$ total
+- Intérêts : Culture, histoire, plages, faune, nourriture
+- Destinations : Colombo, Sigiriya, Kandy, Nuwara Eliya, Ella, Yala, Galle
+Demandes spécifiques :
+- Voir les sites du patrimoine mondial de l'UNESCO
+- Intéressé par les visites de plantations de thé
+- Besoin d'options de nourriture végétarienne
+- Préfère les hôtels 4 étoiles
+- Utiliser les routes de train panoramiques
+- Inclure un safari faunique à Yala
+- Temps plage à Galle ou Mirissa
+Plus vous fournissez de détails, mieux nous pouvons personnaliser votre itinéraire !"""
+    )
+with col2:
+    st.markdown("### ✨ Caractéristiques du Sri Lanka")
+  
+    features = [
+        ("🏛️", "8 Sites UNESCO", "Triangle Culturel & Forts"),
+        ("🏖️", "1340km de Côtes", "Belles plages"),
+        ("🐘", "26 Parcs Nationaux", "Faune & Safari"),
+        ("☕", "Pays du Thé", "Visites de stations de montagne"),
+        ("🕌", "Multi-Culturel", "Bouddhiste, Hindou, Musulman, Chrétien"),
+        ("🌶️", "Jardins d'Épices", "Cuisine authentique"),
+        ("🏄", "Sports Nautiques", "Surf, plongée, rafting"),
+        ("🚂", "Trains Panoramiques", "Chemins de fer de montagne"),
+        ("🌿", "Ayurveda", "Bien-être & Spa"),
+        ("📷", "Photographie", "Paysages magnifiques")
+    ]
+  
+    for icon, title, desc in features[:5]:
+        st.markdown(f"""
+        <div style="background: #f8fafc; border-radius: 12px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #3b82f6; border: 1px solid #e2e8f0;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.5rem;">{icon}</span>
+                <div>
+                    <strong style="color: #1e293b;">{title}</strong>
+                    <p style="color: #475569; font-size: 0.8rem; margin: 3px 0 0 0;">{desc}</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Bouton de génération
+st.markdown("---")
+col_btn1, col_btn2, col_btn3 = st.columns([3, 1, 1])
+with col_btn1:
+    generate_clicked = st.button(
+        "🚀 Générer l'Itinéraire Sri Lanka",
+        type="primary",
+        use_container_width=True,
+        help="Créer un itinéraire détaillé avec des lieux et images réels"
+    )
+with col_btn2:
+    if st.button("🎲 Inspirez-moi", use_container_width=True):
+        sri_lanka_cities = [
+            "Colombo", "Kandy", "Galle", "Sigiriya", "Nuwara Eliya",
+            "Ella", "Yala", "Mirissa", "Trincomalee", "Bentota"
+        ]
+        random_city = random.choice(sri_lanka_cities)
+        days = random.randint(7, 14)
+      
+        st.session_state.email_text = f"""Planification d'un voyage de {days} jours pour explorer la beauté du Sri Lanka, en se concentrant sur {random_city} et les zones environnantes.
+Dates de voyage : Dates flexibles l'année prochaine
+Voyageurs : {random.randint(1, 4)} {'personne' if random.randint(1, 4) == 1 else 'personnes'}
+Budget : ${random.randint(2000, 5000)}
+Intérêts : Immersion culturelle, nourriture locale, attractions naturelles, photographie
+Destinations : {random_city} et attractions à proximité
+Veut expérimenter : Culture locale authentique, attractions incontournables, joyaux cachés
+Créer un itinéraire équilibré mélangeant spots touristiques populaires et expériences hors des sentiers battus."""
+with col_btn3:
+    if st.button("🔄 Tout Effacer", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+# Générer et afficher l'itinéraire
+if generate_clicked and email_text.strip():
+    with st.spinner("🇱🇰 Création de votre itinéraire complet du Sri Lanka avec des destinations réelles..."):
+        itinerary_data = generate_comprehensive_itinerary(email_text)
+      
+        if itinerary_data:
+            st.session_state.itinerary = itinerary_data
+            st.success("✨ Itinéraire généré avec succès !")
+            time.sleep(1)
+            st.rerun()
+
+# Afficher l'itinéraire s'il est disponible
+if st.session_state.itinerary:
+    itinerary_data = st.session_state.itinerary
+    summary = itinerary_data.get("trip_summary", {})
+  
+    country = summary.get("destination_country", "Sri Lanka")
+    destinations = summary.get("destinations", [])
+    city = destinations[0] if destinations else ""
+    days = summary.get("duration_days", 0)
+    travelers = summary.get("travelers", 2)
+    budget = summary.get("budget", "")
+    theme = summary.get("trip_theme", "")
+  
+    # Récupérer le drapeau du Sri Lanka
+    countries_data = get_all_countries()
+    sri_lanka_data = next((c for c in countries_data if c["name"] == "Sri Lanka"), {})
+    flag = sri_lanka_data.get("flag", "🇱🇰") if sri_lanka_data else "🇱🇰"
+  
+    # En-tête du Résumé du Voyage
+    st.markdown("---")
+    st.markdown(f"""
+    <div style="text-align: center; margin-bottom: 40px; padding: 30px; background: #f8fafc; border-radius: 25px; border: 1px solid #e2e8f0;">
+        <div style="font-size: 4rem; margin-bottom: 10px;">{flag}</div>
+        <h1 class="gradient-text" style="font-size: 2.8rem; margin-bottom: 15px;">
+            {summary.get('trip_title', 'Votre Itinéraire de Voyage au Sri Lanka')}
+        </h1>
+        <p style="color: #475569; font-size: 1.3rem; margin-bottom: 5px;">
+            📍 {', '.join(destinations)} • ⏱️ {days} Jours • 👥 {travelers} Voyageurs
+        </p>
+        <p style="color: #10b981; font-size: 1.1rem; font-weight: 600;">
+            {theme} • 💰 Budget : {budget} • ⭐ {summary.get('best_time_to_visit', 'Meilleure Saison')}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+  
+    # Cartes de Statistiques Améliorées
+    col_stats = st.columns(5)
+  
+    stats_data = [
+        ("📍", "Destinations", ', '.join(destinations[:2]) + ('...' if len(destinations)>2 else '')),
+        ("⏱️", "Durée", f"{days} Jours"),
+        ("👥", "Voyageurs", str(travelers)),
+        ("💰", "Budget", budget),
+        ("⭐", "Thème", theme[:15] + ('...' if len(theme) > 15 else ''))
+    ]
+  
+    for idx, (icon, label, value) in enumerate(stats_data):
+        with col_stats[idx]:
+            st.markdown(f"""
+            <div class="stat-card">
+                <div class="stat-icon">{icon}</div>
+                <div class="stat-number">{value}</div>
+                <div class="stat-label">{label}</div>
+            </div>
+            """, unsafe_allow_html=True)
+  
+    # Cartes d'Information Supplémentaire
+    if any([summary.get('currency'), summary.get('language'), summary.get('time_zone')]):
+        st.markdown("### ℹ️ Informations sur la Destination")
+      
+        info_cols = st.columns(3)
+      
+        info_items = [
+            ("💱", "Devise", summary.get('currency', 'Roupie srilankaise (LKR)')),
+            ("🗣️", "Langue", summary.get('language', 'Cingalais, Tamoul, Anglais')),
+            ("🕐", "Fuseau Horaire", summary.get('time_zone', 'GMT+5:30'))
+        ]
+      
+        for idx, (icon, label, value) in enumerate(info_items):
+            with info_cols[idx]:
+                st.markdown(f"""
+                <div style="background: #f8fafc; border-radius: 15px; padding: 20px; text-align: center; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 2rem; margin-bottom: 10px;">{icon}</div>
+                    <div style="color: #1e293b; font-weight: 600; margin-bottom: 5px;">{label}</div>
+                    <div style="color: #475569; font-size: 0.9rem;">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
+  
+    # Carte Interactive (pour la ville principale)
+    if show_map:
+        real_places = itinerary_data.get("places_by_city", {}).get(city, [])
+        if real_places:
+            st.markdown('<div class="section-title">🗺️ Carte Interactive</div>', unsafe_allow_html=True)
+          
+            map_obj = create_places_map(real_places, city, country)
+            if map_obj:
+                with st.container():
+                    folium_static(map_obj, width=1200, height=500)
+  
+    # Attractions Clés
+    key_attractions = itinerary_data.get("key_attractions", [])
+    if key_attractions:
+        st.markdown('<div class="section-title">🌟 Attractions Incontournables</div>', unsafe_allow_html=True)
+      
+        # Vue supérieure : Disposition horizontale utilisant des colonnes pour des cartes côte à côte
+        num_cols = min(3, len(key_attractions)) # Jusqu'à 3 colonnes pour la vue supérieure
+        attraction_cols = st.columns(num_cols)
+      
+        for idx, attraction in enumerate(key_attractions):
+            with attraction_cols[idx % num_cols]:
+                # Récupérer l'image réelle pour l'attraction en utilisant sa ville
+                att_city = attraction.get("city", city)
+                image_data = get_place_image(attraction["name"], att_city, country, size="medium") if show_images else None
+              
+                # Carte de Lieu sans HTML brut pour éviter les problèmes de rendu
+                st.markdown(f"### {attraction['name']}")
+                st.markdown(f"**Type :** {attraction.get('type', 'Attraction')}")
+                st.markdown(f"**Meilleur Moment :** {attraction.get('best_time_to_visit', 'N/A')}")
+                st.markdown(f"**Durée :** {attraction.get('duration_needed', 'N/A')}")
+              
+                if image_data:
+                    st.image(image_data["url"], caption=f"📸 {image_data['photographer']}", use_container_width=True)
+              
+                st.markdown(f"**Description :** {attraction.get('description', '')}")
+              
+                # Grille d'information utilisant des colonnes pour simuler la grille sans HTML
+                info_col1, info_col2 = st.columns(2)
+                with info_col1:
+                    st.markdown(f"**🎫 Prix du Billet :** {attraction.get('ticket_price', 'Variable')}")
+                    st.markdown(f"**🕐 Horaires d'Ouverture :** {attraction.get('opening_hours', 'N/A')}")
+                with info_col2:
+                    st.markdown(f"**🚗 Transport :** {attraction.get('transportation', 'N/A')}")
+                    st.markdown(f"**💡 Conseils :** {attraction.get('tips', 'N/A')}")
+              
+                st.markdown("---") # Séparateur pour chaque attraction
+  
+    # Section Itinéraire Quotidien
+    st.markdown('<div class="section-title">📅 Itinéraire Quotidien</div>', unsafe_allow_html=True)
+  
+    daily_itinerary = itinerary_data.get("daily_itinerary", [])
+  
+    for day in daily_itinerary:
+        day_num = day.get("day", 1)
+        day_title = day.get("title", "Exploration")
+        day_overview = day.get("overview", "")
+      
+        # Extraire la ville pour ce jour
+        current_city = extract_city_from_title(day_title)
+        if not current_city:
+            current_city = city # repli sur la ville principale
+      
+        # En-tête du Jour
+        st.markdown(f"""
+        <div class="day-header">
+            <h2 style="color: white; margin: 0; font-size: 1.8rem;">Jour {day_num} : {day_title}</h2>
+            {f'<p style="color: rgba(255, 255, 255, 0.8); margin: 10px 0 0 0; font-size: 1rem;">{day_overview}</p>' if day_overview else ''}
+        </div>
+        """, unsafe_allow_html=True)
+      
+        # Récupérer des lieux RÉELS pour ce jour en utilisant la ville actuelle
+        daily_places = get_daily_places(day_num, current_city, country, num_places=3)
+      
+        # Afficher les Lieux
+        if daily_places:
+            st.markdown("### 🏆 Meilleures Attractions pour Aujourd'hui")
+          
+            place_cols = st.columns(min(3, len(daily_places)))
+          
+            for idx, place in enumerate(daily_places):
+                with place_cols[idx]:
+                    with st.container():
+                        # Récupérer l'image
+                        image_data = None
+                        if show_images:
+                            with st.spinner(""):
+                                image_data = get_place_image(place["name"], current_city, country, size="medium")
+                      
+                        # Contenu de la carte
+                        col_badge, col_rating = st.columns([2, 1])
+                        with col_badge:
+                            st.markdown(f"""<div class="place-badge">{place['type']}</div>""", unsafe_allow_html=True)
+                      
+                        with col_rating:
+                            stars = "⭐" * int(place.get("rating", 4))
+                            if place.get("rating", 4) - int(place.get("rating", 4)) >= 0.5:
+                                stars += "½"
+                          
+                            st.markdown(f"""
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <span style="color: #f59e0b; font-size: 0.9rem;">{stars}</span>
+                                <span style="color: #f59e0b; font-weight: bold; font-size: 0.9rem;">
+                                    {place.get('rating', 4)}/5
+                                </span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                      
+                        # Nom du lieu
+                        st.markdown(f"""
+                        <div style="color: #1e293b; font-size: 1.2rem; font-weight: 700; margin: 10px 0;">
+                            {place['icon']} {place['name']}
+                        </div>
+                        """, unsafe_allow_html=True)
+                      
+                        # Image
+                        if image_data and show_images:
+                            try:
+                                st.image(
+                                    image_data["url"],
+                                    caption=f"📸 {image_data['photographer']}",
+                                    use_container_width=True
+                                )
+                            except:
+                                pass
+                      
+                        # Description
+                        st.markdown(f"""
+                        <div style="color: #475569; font-size: 0.9rem; line-height: 1.6; margin: 10px 0;">
+                            {place['description']}
+                        </div>
+                        """, unsafe_allow_html=True)
+                      
+                        # Étiquettes
+                        if "tags" in place:
+                            tag_cols = st.columns(3)
+                            for tag_idx, tag in enumerate(place["tags"][:3]):
+                                with tag_cols[tag_idx]:
+                                    st.markdown(f"""<div class="place-tag">{tag}</div>""", unsafe_allow_html=True)
+                      
+                        # Info temps
+                        col_time1, col_time2 = st.columns(2)
+                        with col_time1:
+                            st.markdown(f"""
+                            <div class="time-item">
+                                <span style="color: #60a5fa;">⏰</span>
+                                <span>{place['best_time']}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                      
+                        with col_time2:
+                            st.markdown(f"""
+                            <div class="time-item">
+                                <span style="color: #10b981;">🕐</span>
+                                <span>{place['duration']}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+      
+        # Emploi du Temps Quotidien
+        st.markdown("### ⏰ Emploi du Temps Quotidien")
+      
+        schedule_data = [
+            ("🌅 Matin", "morning", day.get("morning", {})),
+            ("☀️ Après-midi", "afternoon", day.get("afternoon", {})),
+            ("🌙 Soirée", "evening", day.get("evening", {}))
+        ]
+      
+        schedule_cols = st.columns(3)
+      
+        for idx, (title, key, schedule) in enumerate(schedule_data):
+            with schedule_cols[idx]:
+                if schedule:
+                    card_class = f"{key}-card"
+                  
+                    st.markdown(f"""
+                    <div class="schedule-card {card_class}">
+                        <h4 style="color: {['#f59e0b', '#10b981', '#8b5cf6'][idx]}; margin: 0 0 15px 0; font-size: 1.2rem;">
+                            {title}
+                        </h4>
+                        <p style="color: #475569; font-size: 0.9rem; margin: 5px 0;">
+                            <strong>{schedule.get('time', 'N/A')}</strong>
+                        </p>
+                        <p style="color: #1e293b; font-weight: 600; margin: 10px 0; font-size: 1.1rem;">
+                            {schedule.get('activity', '')}
+                        </p>
+                        <p style="color: #475569; font-size: 0.9rem; line-height: 1.6;">
+                            {schedule.get('description', '')}
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                  
+                    # Information supplémentaire
+                    info_items = [
+                        ("💰 Coût", schedule.get('cost')),
+                        ("🚗 Transport", schedule.get('transportation')),
+                        ("💡 Conseils", schedule.get('tips'))
+                    ]
+                  
+                    for info_label, info_value in info_items:
+                        if info_value:
+                            st.info(f"**{info_label} :** {info_value}")
+      
+        # Hébergement & Nourriture
+        col_acc, col_food = st.columns(2)
+      
+        with col_acc:
+            if day.get("accommodation_suggestion"):
+                st.markdown(f"""
+                <div style="background: rgba(59, 130, 246, 0.1); border-radius: 15px; padding: 20px; margin-top: 20px;">
+                    <h4 style="color: #3b82f6; margin: 0 0 10px 0;">🏨 Hébergement</h4>
+                    <p style="color: #475569; margin: 0;">{day['accommodation_suggestion']}</p>
+                </div>
+                """, unsafe_allow_html=True)
+      
+        with col_food:
+            if day.get("food_recommendations"):
+                st.markdown(f"""
+                <div style="background: rgba(245, 158, 11, 0.1); border-radius: 15px; padding: 20px; margin-top: 20px;">
+                    <h4 style="color: #f59e0b; margin: 0 0 10px 0;">🍽️ Recommandations Culinaires</h4>
+                    <ul style="color: #475569; margin: 0; padding-left: 20px;">
+                        {"".join([f'<li style="margin-bottom: 5px;">{item}</li>' for item in day["food_recommendations"][:3]])}
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+      
+        st.markdown("---")
+  
+    # Répartition du Budget (Visuel)
+    budget_data = itinerary_data.get("budget_breakdown", {})
+    if budget_data and budget_data.get("total_estimate"):
+        st.markdown('<div class="section-title">💰 Répartition du Budget</div>', unsafe_allow_html=True)
+      
+        # Créer un graphique circulaire
+        budget_items = []
+        budget_values = []
+      
+        for key, value in budget_data.items():
+            if key != "total_estimate" and value:
+                budget_items.append(key.title())
+                budget_values.append(float(value.replace('$', '').replace(',', '')) if '$' in str(value) else 100)
+      
+        if budget_items and budget_values:
+            fig = go.Figure(data=[go.Pie(
+                labels=budget_items,
+                values=budget_values,
+                hole=.3,
+                marker_colors=['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280']
+            )])
+          
+            fig.update_layout(
+                title="Répartition du Budget",
+                showlegend=True,
+                height=400,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#475569')
+            )
+          
+            st.plotly_chart(fig, use_container_width=True)
+          
+            st.markdown(f"""
+            <div style="text-align: center; margin-top: 20px;">
+                <h3 style="color: #10b981;">Budget Total Estimé : {budget_data.get('total_estimate', 'N/A')}</h3>
+            </div>
+            """, unsafe_allow_html=True)
+  
+   # Information d'Urgence
+    emergency_info = itinerary_data.get("emergency_information", {})
+    if emergency_info:
+        st.markdown('<div class="section-title">⚕️ Information d\'Urgence</div>', unsafe_allow_html=True)
+      
+        em_cols = st.columns(2)
+      
+        with em_cols[0]:
+            st.warning(f"""
+            **Contacts d'Urgence au Sri Lanka :**
+            - 🚨 Urgence : {emergency_info.get('emergency_number', '119 / 118')}
+            - 👮 Police : {emergency_info.get('police', '119')}
+            - 🚑 Ambulance : {emergency_info.get('ambulance', '110')}
+            - 🛡️ Police Touristique : {emergency_info.get('tourist_police', '1912')}
+            """)
+      
+        with em_cols[1]:
+            st.error(f"""
+            **Information Importante :**
+            - 🏥 Hôpital le Plus Proche : {emergency_info.get('nearest_hospital', 'Vérifier localement')}
+            - 🏛️ Contact de l'Ambassade : {emergency_info.get('embassy_contact', 'Contactez votre ambassade à Colombo')}
+            - ⚠️ Conseils de Sécurité : {summary.get('safety_tips', 'Restez vigilant dans les zones bondées')}
+            """)
+  
+    # Section Téléchargement
+    st.markdown('<div class="section-title">📥 Options d\'Exportation</div>', unsafe_allow_html=True)
+    col_dl1, col_dl2, col_dl3, col_dl4 = st.columns(4)
+  
+    with col_dl1:
+        # Téléchargement JSON
+        json_data = json.dumps(itinerary_data, indent=2, ensure_ascii=False)
+        st.download_button(
+            label="📊 Données Complètes (JSON)",
+            data=json_data,
+            file_name=f"itineraire_sri_lanka.json",
+            mime="application/json",
+            use_container_width=True
+        )
+  
+    with col_dl2:
+        # Téléchargement texte type PDF
+        daily_itinerary = itinerary_data.get("daily_itinerary", [])
+        key_attractions = itinerary_data.get("key_attractions", [])
+        text_content = f"""
+{'='*70}
+🇱🇰 ITINÉRAIRE DE VOYAGE COMPLET AU SRI LANKA
+{'='*70}
+Destination : {', '.join(destinations)}
+Durée : {days} jours
+Voyageurs : {travelers}
+Budget : {budget}
+Thème : {theme}
+{'='*70}
+RÉSUMÉ DU VOYAGE
+{'='*70}
+• Meilleure Période pour Visiter : {summary.get('best_time_to_visit', "Décembre à avril pour l'Ouest/Sud, Mai à septembre pour l'Est")}
+• Devise : {summary.get('currency', 'Roupie srilankaise (LKR)')}
+• Langue : {summary.get('language', 'Cingalais, Tamoul, Anglais')}
+• Fuseau Horaire : {summary.get('time_zone', 'GMT+5:30')}
+• Exigences de Visa : {summary.get('visa_requirements', "ETA requis pour la plupart des nationalités")}
+• Vaccinations : {summary.get('vaccinations', 'Consulter un médecin, recommandé : Hépatite A, Typhoïde')}
+• Conseils d'Emballage : {summary.get('packing_tips', "Vêtements en coton léger, protection solaire, répulsif anti-moustiques, vêtements modestes pour les temples")}
+{'='*70}
+ITINÉRAIRE QUOTIDIEN
+{'='*70}
+"""
+        for day in daily_itinerary:
+            text_content += f"""
+Jour {day.get('day')} : {day.get('title')}
+{'-'*50}
+Matin ({day.get('morning', {}).get('time', 'N/A')}) :
+Activité : {day.get('morning', {}).get('activity', 'N/A')}
+Description : {day.get('morning', {}).get('description', 'N/A')}
+Coût : {day.get('morning', {}).get('cost', 'N/A')}
+Après-midi ({day.get('afternoon', {}).get('time', 'N/A')}) :
+Activité : {day.get('afternoon', {}).get('activity', 'N/A')}
+Description : {day.get('afternoon', {}).get('description', 'N/A')}
+Coût : {day.get('afternoon', {}).get('cost', 'N/A')}
+Soirée ({day.get('evening', {}).get('time', 'N/A')}) :
+Activité : {day.get('evening', {}).get('activity', 'N/A')}
+Description : {day.get('evening', {}).get('description', 'N/A')}
+Coût : {day.get('evening', {}).get('cost', 'N/A')}
+Hébergement : {day.get('accommodation_suggestion', 'N/A')}
+Recommandations Culinaires : {', '.join(day.get('food_recommendations', []))}
+"""
+      
+        text_content += f"""
+{'='*70}
+ATTRACTIONS CLÉS
+{'='*70}
+"""
+        for attraction in key_attractions[:5]:
+            text_content += f"""
+• {attraction['name']} ({attraction.get('type', 'Attraction')}) à {attraction.get('city', 'N/A')}
+  Description : {attraction.get('description', 'N/A')}
+  Meilleur Moment : {attraction.get('best_time_to_visit', 'N/A')}
+  Billet : {attraction.get('ticket_price', 'N/A')}
+  Heures : {attraction.get('opening_hours', 'N/A')}
+  Conseils : {attraction.get('tips', 'N/A')}
+"""
+      
+        st.download_button(
+            label="📝 Guide Détaillé (TXT)",
+            data=text_content,
+            file_name="guide_voyage_sri_lanka.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+  
+    with col_dl3:
+        # Téléchargement CSV
+        csv_data = []
+        daily_itinerary = itinerary_data.get("daily_itinerary", [])
+        for day in daily_itinerary:
+            day_num = day.get("day", 1)
+            day_city = extract_city_from_title(day.get("title", "")) or city
+            daily_places = get_daily_places(day_num, day_city, country)
+            for place in daily_places:
+                csv_data.append({
+                    "Jour": day_num,
+                    "Lieu": place["name"],
+                    "Type": place["type"],
+                    "Note": place.get("rating", ""),
+                    "Meilleur Moment": place["best_time"],
+                    "Durée": place["duration"],
+                    "Description": place["description"][:150]
+                })
+      
+        if csv_data:
+            df = pd.DataFrame(csv_data)
+            csv_string = df.to_csv(index=False)
+            st.download_button(
+                label="📈 Données des Lieux (CSV)",
+                data=csv_string,
+                file_name="lieux_sri_lanka.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+  
+    with col_dl4:
+        if st.button("🔄 Nouvel Itinéraire", use_container_width=True):
+            st.session_state.itinerary = None
+            st.session_state.email_text = ""
+            st.rerun()
+
+# Pied de page
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #64748b; padding: 30px; margin-top: 40px;">
+    <div style="display: flex; justify-content: center; gap: 25px; margin-bottom: 20px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px 20px; border-radius: 25px; border: 1px solid #e2e8f0;">
+            <span style="color: #60a5fa;">🏙️</span>
+            <span>35 Villes du Sri Lanka</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px 20px; border-radius: 25px; border: 1px solid #e2e8f0;">
+            <span style="color: #60a5fa;">📍</span>
+            <span>350+ Attractions</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px 20px; border-radius: 25px; border: 1px solid #e2e8f0;">
+            <span style="color: #60a5fa;">🤖</span>
+            <span>Itinéraires alimentés par IA</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px 20px; border-radius: 25px; border: 1px solid #e2e8f0;">
+            <span style="color: #60a5fa;">🔄</span>
+            <span>Mises à jour en Temps Réel</span>
+        </div>
+    </div>
+    <p style="margin: 10px 0; font-size: 0.9rem; color: #475569;">
+        Alimenté par : <strong>REST Countries • OpenTripMap • Foursquare • Unsplash • Pexels • Groq AI</strong>
+    </p>
+    <p style="margin: 0; font-size: 0.8rem; color: #64748b;">
+        © 2024 Assistant de Voyage AI Sri Lanka • La Perle de l'Océan Indien • Toutes les données vérifiées et organisées
+    </p>
+</div>
+""", unsafe_allow_html=True)
