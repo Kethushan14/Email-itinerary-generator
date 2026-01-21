@@ -1,5 +1,4 @@
-GROQ_API_KEY=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
-GROQ_API_KEY=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
+
 
 import streamlit as st
 import os
