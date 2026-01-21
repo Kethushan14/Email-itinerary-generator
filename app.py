@@ -39,7 +39,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Enhanced CSS with White Theme + Hero Section + Blinking Cursor
+# Enhanced CSS with White Theme + Hero Section
 st.markdown("""
 <style>
     /* Main container - White Theme */
@@ -979,6 +979,9 @@ section[data-testid="stSidebar"] select:focus {
     outline: none !important;
 }
 
+
+
+
 /* Placeholder text for empty select boxes */
 section[data-testid="stSidebar"] .stSelectbox > div > div > div > div:empty::before {
     content: "Select an option";
@@ -1746,7 +1749,7 @@ section[data-testid="stSidebar"] .stSelectbox > div > div > div > div:empty::bef
     z-index: 3;
 }
 
-/* Custom text area styling with blinking cursor */
+/* Custom text area styling */
 .custom-textarea {
     background: rgba(255, 255, 255, 0.8) !important;
     backdrop-filter: blur(10px);
@@ -1995,75 +1998,6 @@ section[data-testid="stSidebar"] .stSelectbox > div > div > div > div:empty::bef
     opacity: 0.2;
     animation: none;
 }
-
-/* ===============================
-   BLINKING CURSOR EFFECT
-================================ */
-
-/* Blinking cursor animation */
-@keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-}
-
-.blinking-cursor {
-    display: inline-block;
-    width: 2px;
-    height: 20px;
-    background-color: #3b82f6;
-    animation: blink 1s infinite;
-    margin-left: 2px;
-    vertical-align: middle;
-}
-
-.text-area-wrapper {
-    position: relative;
-    margin-bottom: 10px;
-}
-
-.cursor-indicator {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.85rem;
-    color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
-    padding: 4px 12px;
-    border-radius: 12px;
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.cursor-indicator.visible {
-    opacity: 1;
-}
-
-/* Enhanced textarea with cursor */
-.textarea-with-cursor {
-    position: relative;
-}
-
-.textarea-with-cursor::after {
-    content: '';
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    width: 2px;
-    height: 20px;
-    background-color: #3b82f6;
-    animation: blink 1s infinite;
-    display: none;
-}
-
-.textarea-with-cursor:focus::after {
-    display: block;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -3538,87 +3472,20 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
     
-    # Add JavaScript for blinking cursor
-    st.markdown("""
-    <script>
-    // Function to handle textarea focus and show cursor indicator
-    function setupBlinkingCursor() {
-        const textarea = document.querySelector('[data-testid="stTextArea"] textarea');
-        if (textarea) {
-            // Create cursor indicator
-            const cursorIndicator = document.createElement('div');
-            cursorIndicator.className = 'cursor-indicator';
-            cursorIndicator.innerHTML = '<span>Ready</span><span class="blinking-cursor"></span>';
-            
-            // Add to wrapper
-            const wrapper = document.querySelector('.text-area-wrapper');
-            if (wrapper) {
-                wrapper.appendChild(cursorIndicator);
-                
-                // Show cursor indicator on focus
-                textarea.addEventListener('focus', function() {
-                    cursorIndicator.classList.add('visible');
-                    cursorIndicator.innerHTML = '<span>Typing...</span><span class="blinking-cursor"></span>';
-                });
-                
-                // Hide cursor indicator on blur
-                textarea.addEventListener('blur', function() {
-                    cursorIndicator.classList.remove('visible');
-                    cursorIndicator.innerHTML = '<span>Ready</span><span class="blinking-cursor"></span>';
-                });
-                
-                // Update cursor position on input
-                textarea.addEventListener('input', function() {
-                    if (document.activeElement === textarea) {
-                        const cursorPos = textarea.selectionStart;
-                        const textBeforeCursor = textarea.value.substring(0, cursorPos);
-                        const linesBefore = textBeforeCursor.split('\\n').length;
-                        const currentLine = linesBefore;
-                        const column = cursorPos - textBeforeCursor.lastIndexOf('\\n');
-                        
-                        cursorIndicator.innerHTML = `Line ${currentLine}, Col ${column} <span class="blinking-cursor"></span>`;
-                    }
-                });
-                
-                // Update cursor position on keyup
-                textarea.addEventListener('keyup', function() {
-                    if (document.activeElement === textarea) {
-                        const cursorPos = textarea.selectionStart;
-                        const textBeforeCursor = textarea.value.substring(0, cursorPos);
-                        const linesBefore = textBeforeCursor.split('\\n').length;
-                        const currentLine = linesBefore;
-                        const column = cursorPos - textBeforeCursor.lastIndexOf('\\n');
-                        
-                        cursorIndicator.innerHTML = `Line ${currentLine}, Col ${column} <span class="blinking-cursor"></span>`;
-                    }
-                });
-                
-                // Show cursor if textarea already has focus
-                if (document.activeElement === textarea) {
-                    cursorIndicator.classList.add('visible');
-                    cursorIndicator.innerHTML = '<span>Typing...</span><span class="blinking-cursor"></span>';
-                }
-            }
-        }
-    }
     
-    // Run setup when page loads
-    document.addEventListener('DOMContentLoaded', setupBlinkingCursor);
     
-    // Also run after Streamlit updates
-    const observer = new MutationObserver(setupBlinkingCursor);
-    observer.observe(document.body, { childList: true, subtree: true });
-    </script>
-    """, unsafe_allow_html=True)
+    
+    
+    
     
     # Create a container with custom class
     st.markdown('<div class="text-area-wrapper">', unsafe_allow_html=True)
     
     email_text = st.text_area(
-        "Describe your travel plans:",
+        "Describe your travel plans:",  # Keep label visible
         value=st.session_state.email_text,
         height=280,
-        placeholder="🇱🇰 Tell us about your Sri Lanka trip!\n\nExample:\n• Travel dates and duration\n• Number of travelers\n• Budget range\n• Interests (culture, beaches, wildlife, etc.)\n• Specific destinations or activities\n• Any special requirements",
+        placeholder="""🇱🇰 Tell us about your Sri Lanka trip!...""",  # Shortened for brevity
         key="travel_inquiry_textarea"
     )
     
@@ -3634,7 +3501,6 @@ with col1:
         </div>
     </div>
     """, unsafe_allow_html=True)
-
 with col2:
     st.markdown("### ✨ Sri Lanka Features")
   
@@ -3706,7 +3572,6 @@ if generate_clicked and email_text.strip():
             st.success("✨ Itinerary generated successfully!")
             time.sleep(1)
             st.rerun()
-
 # Display itinerary if available
 if st.session_state.itinerary:
     itinerary_data = st.session_state.itinerary
