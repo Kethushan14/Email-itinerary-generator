@@ -17,6 +17,58 @@ from streamlit_folium import folium_static
 # Load environment variables
 load_dotenv()
 
+# ===============================
+# INITIALIZATION & VALIDATION
+# ===============================
+
+def init_session_state():
+    """Initialize all session state variables"""
+    if 'itinerary' not in st.session_state:
+        st.session_state.itinerary = None
+    if 'email_text' not in st.session_state:
+        st.session_state.email_text = ""
+    if 'image_cache' not in st.session_state:
+        st.session_state.image_cache = {}
+    if 'places_cache' not in st.session_state:
+        st.session_state.places_cache = {}
+    if 'countries_data' not in st.session_state:
+        st.session_state.countries_data = {}
+    if 'current_step' not in st.session_state:
+        st.session_state.current_step = 1
+    if 'user_preferences' not in st.session_state:
+        st.session_state.user_preferences = {}
+
+def validate_api_keys():
+    """Validate all required API keys"""
+    missing_keys = []
+    
+    if not os.environ.get("GROQ_API_KEY"):
+        missing_keys.append("GROQ_API_KEY")
+    
+    # Only validate GROQ API key, others are optional
+    if missing_keys:
+        st.error(f"❌ Missing required API keys: {', '.join(missing_keys)}")
+        st.stop()
+    
+    return True
+
+def validate_email_content(email_content):
+    """Validate the travel inquiry email content"""
+    if not email_content or len(email_content.strip()) < 20:
+        return False, "Please provide more details about your trip (minimum 20 characters)"
+    
+    # Check for key information
+    required_keywords = ['day', 'travel', 'visit', 'stay', 'budget', 'sri', 'lanka']
+    found_keywords = sum(1 for keyword in required_keywords if keyword.lower() in email_content.lower())
+    
+    if found_keywords < 2:
+        return False, "Please include more details like: duration, destinations, budget, or mention Sri Lanka"
+    
+    return True, "Valid input"
+
+# Initialize session state
+init_session_state()
+
 # Initialize Groq client
 api_key = os.environ.get("GROQ_API_KEY")
 if not api_key:
@@ -24,12 +76,15 @@ if not api_key:
     st.stop()
 client = Groq(api_key=api_key)
 
-# API Keys
+# API Keys (silently load, don't show warnings)
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 GOOGLE_PLACES_API_KEY = os.environ.get("GOOGLE_PLACES_API_KEY", "")
 OPENTRIPMAP_API_KEY = os.environ.get("OPENTRIPMAP_API_KEY", "")
 FOURSQUARE_API_KEY = os.environ.get("FOURSQUARE_API_KEY", "")
+
+# Validate API keys (only checks GROQ)
+validate_api_keys()
 
 # Set page config
 st.set_page_config(
@@ -39,7 +94,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Enhanced CSS with White Theme + Hero Section
+# ===============================
+# CSS STYLES WITH WHITE SIDEBAR
+# ===============================
+
 st.markdown("""
 <style>
     /* Main container - White Theme */
@@ -51,6 +109,123 @@ st.markdown("""
     /* Main content background */
     .main .block-container {
         background: #ffffff;
+    }
+    
+    /* ===============================
+       SIDEBAR - PURE WHITE BACKGROUND
+    ================================ */
+    
+    /* Main sidebar container - White */
+    section[data-testid="stSidebar"] {
+        background: #ffffff !important;
+        border-right: 1px solid #e2e8f0 !important;
+    }
+    
+    /* Sidebar content wrapper */
+    section[data-testid="stSidebar"] > div {
+        background: transparent !important;
+    }
+    
+    /* Sidebar headings */
+    section[data-testid="stSidebar"] h3 {
+        color: #1e293b !important;
+        font-size: 1.4rem !important;
+        font-weight: 700 !important;
+        margin: 25px 0 15px 0 !important;
+        padding: 10px 0 !important;
+        position: relative !important;
+        letter-spacing: -0.3px;
+    }
+    
+    /* Gradient underline for sidebar headings */
+    section[data-testid="stSidebar"] h3::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 40px;
+        height: 3px;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        border-radius: 2px;
+        transition: width 0.3s ease;
+    }
+    
+    section[data-testid="stSidebar"] h3:hover::after {
+        width: 60px;
+    }
+    
+    /* Sidebar select boxes */
+    section[data-testid="stSidebar"] .stSelectbox {
+        margin: 15px 0 !important;
+    }
+    
+    section[data-testid="stSidebar"] .stSelectbox > label {
+        color: #475569 !important;
+        font-weight: 600 !important;
+        font-size: 1rem !important;
+        margin-bottom: 8px !important;
+        display: block !important;
+    }
+    
+    /* Sidebar buttons */
+    section[data-testid="stSidebar"] .stButton > button {
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        border: none;
+        border-radius: 12px;
+        padding: 12px 20px;
+        font-weight: 600;
+        color: white;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 
+            0 4px 16px rgba(59, 130, 246, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        width: 100%;
+        margin: 8px 0;
+    }
+    
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        transform: translateY(-3px);
+        box-shadow: 
+            0 8px 24px rgba(59, 130, 246, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        background: linear-gradient(135deg, #2563eb, #7c3aed);
+    }
+    
+    /* Sidebar checkboxes */
+    section[data-testid="stSidebar"] .stCheckbox > label {
+        color: #475569 !important;
+        font-weight: 500 !important;
+        font-size: 0.9rem !important;
+    }
+    
+    /* Sidebar dividers */
+    section[data-testid="stSidebar"] hr {
+        margin: 25px 0;
+        border: none;
+        height: 1px;
+        background: linear-gradient(90deg, 
+            transparent, 
+            rgba(59, 130, 246, 0.2), 
+            transparent);
+    }
+    
+    /* Sidebar scrollbar */
+    section[data-testid="stSidebar"] ::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    section[data-testid="stSidebar"] ::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.02);
+        border-radius: 4px;
+    }
+    
+    section[data-testid="stSidebar"] ::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+        border-radius: 4px;
+    }
+    
+    section[data-testid="stSidebar"] ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(180deg, #2563eb, #7c3aed);
     }
     
     /* ===============================
@@ -171,825 +346,6 @@ st.markdown("""
         transform: translateY(-2px);
     }
     
-    /* App Header with Transparency Card View */
-.header-card {
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 24px;
-    padding: 40px;
-    margin: 20px auto;
-    max-width: 1200px;
-    box-shadow: 
-        0 20px 60px rgba(0, 0, 0, 0.08),
-        0 8px 32px rgba(59, 130, 246, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.6);
-    position: relative;
-    overflow: hidden;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.header-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 
-        0 30px 80px rgba(0, 0, 0, 0.12),
-        0 15px 40px rgba(59, 130, 246, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.92);
-}
-
-.header-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
-    border-radius: 24px 24px 0 0;
-    z-index: 1;
-}
-
-.header-card::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 150%;
-    height: 150%;
-    background: radial-gradient(circle at center, 
-        rgba(59, 130, 246, 0.05) 0%,
-        rgba(139, 92, 246, 0.03) 25%,
-        rgba(236, 72, 153, 0.01) 50%,
-        transparent 70%);
-    transform: translate(-50%, -50%);
-    z-index: 0;
-    pointer-events: none;
-}
-
-.header-content {
-    position: relative;
-    z-index: 2;
-    text-align: center;
-}
-
-.glow-effect {
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    right: -50%;
-    bottom: -50%;
-    background: radial-gradient(circle at center, 
-        rgba(59, 130, 246, 0.08) 0%,
-        rgba(139, 92, 246, 0.04) 30%,
-        transparent 70%);
-    animation: gentlePulse 8s ease-in-out infinite;
-    pointer-events: none;
-    z-index: 1;
-}
-
-@keyframes gentlePulse {
-    0%, 100% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(1.02); }
-}
-
-.gradient-text {
-    background: linear-gradient(135deg, 
-        #1e40af 0%,
-        #3b82f6 25%,
-        #8b5cf6 50%,
-        #ec4899 75%,
-        #f59e0b 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    text-fill-color: transparent;
-    background-size: 200% auto;
-    animation: gradientShift 8s ease-in-out infinite;
-    font-weight: 800;
-    letter-spacing: -0.5px;
-}
-
-@keyframes gradientShift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-}
-
-.header-subtitle {
-    color: #475569;
-    font-size: 1.2rem;
-    line-height: 1.6;
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 0 20px;
-    position: relative;
-}
-
-.header-subtitle::before,
-.header-subtitle::after {
-    content: '✦';
-    position: absolute;
-    color: #3b82f6;
-    font-size: 1.5rem;
-    opacity: 0.6;
-    animation: subtleFloat 4s ease-in-out infinite;
-}
-
-.header-subtitle::before {
-    left: -10px;
-    top: 50%;
-    transform: translateY(-50%);
-    animation-delay: 0s;
-}
-
-.header-subtitle::after {
-    right: -10px;
-    top: 50%;
-    transform: translateY(-50%);
-    animation-delay: 2s;
-}
-
-@keyframes subtleFloat {
-    0%, 100% { transform: translateY(-50%) rotate(0deg); opacity: 0.4; }
-    50% { transform: translateY(-55%) rotate(180deg); opacity: 0.8; }
-}
-
-.header-icons {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    margin-top: 25px;
-    flex-wrap: wrap;
-}
-
-.header-icon {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: rgba(59, 130, 246, 0.08);
-    border: 1px solid rgba(59, 130, 246, 0.15);
-    border-radius: 12px;
-    color: #1e40af;
-    font-size: 0.9rem;
-    font-weight: 500;
-    backdrop-filter: blur(10px);
-    transition: all 0.3s ease;
-}
-
-.header-icon:hover {
-    background: rgba(59, 130, 246, 0.15);
-    border-color: rgba(59, 130, 246, 0.3);
-    transform: translateY(-2px);
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .hero-section {
-        min-height: 70vh;
-        border-radius: 0 0 30px 30px;
-    }
-    
-    .hero-title {
-        font-size: 2.8rem;
-    }
-    
-    .hero-subtitle {
-        font-size: 1.1rem;
-    }
-    
-    .glass-badge {
-        padding: 8px 16px;
-        font-size: 0.9rem;
-    }
-    
-    .header-card {
-        padding: 30px 20px;
-        margin: 10px;
-        border-radius: 20px;
-    }
-    
-    .gradient-text {
-        font-size: 2.5rem;
-    }
-    
-    .header-subtitle {
-        font-size: 1.1rem;
-        padding: 0 10px;
-    }
-    
-    .header-icons {
-        gap: 10px;
-    }
-    
-    .header-icon {
-        padding: 6px 12px;
-        font-size: 0.85rem;
-    }
-}
-
-@media (max-width: 480px) {
-    .hero-section {
-        min-height: 60vh;
-    }
-    
-    .hero-title {
-        font-size: 2.2rem;
-    }
-    
-    .hero-content {
-        padding: 40px 20px;
-    }
-    
-    .header-card {
-        padding: 25px 15px;
-        border-radius: 16px;
-    }
-    
-    .gradient-text {
-        font-size: 2rem;
-    }
-    
-    .header-subtitle {
-        font-size: 1rem;
-    }
-    
-    .header-icons {
-        flex-direction: column;
-        align-items: center;
-    }
-    
-    .header-icon {
-        width: 100%;
-        max-width: 200px;
-        justify-content: center;
-    }
-}
-
-/* Special effects on hover */
-.header-card:hover .gradient-text {
-    animation-duration: 4s;
-}
-
-.header-card:hover .header-subtitle::before,
-.header-card:hover .header-subtitle::after {
-    animation-duration: 2s;
-}
-
-/* Light mode enhancements */
-.light-theme .header-card {
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.light-theme .header-icon {
-    background: rgba(59, 130, 246, 0.1);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    color: #1e40af;
-}
-
-/* Dark mode support (if needed) */
-.dark-theme .header-card {
-    background: rgba(15, 23, 42, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.dark-theme .header-subtitle {
-    color: #94a3b8;
-}
-
-.dark-theme .header-icon {
-    background: rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    color: #60a5fa;
-}
-                   
-    /* ===============================
-   SIDEBAR (LIGHT GLASS)
-/* ===============================
-   SIDEBAR ENHANCEMENTS - UPDATED
-================================ */
-
-/* Main sidebar container */
-section[data-testid="stSidebar"] {
-    background: rgba(255, 255, 255, 0.92) !important;
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border-right: 1px solid rgba(0, 0, 0, 0.06);
-    box-shadow: 
-        4px 0 24px rgba(0, 0, 0, 0.05),
-        inset 1px 0 0 rgba(255, 255, 255, 0.6);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Hover effect on sidebar */
-section[data-testid="stSidebar"]:hover {
-    border-right-color: rgba(59, 130, 246, 0.2);
-    box-shadow: 
-        4px 0 32px rgba(59, 130, 246, 0.1),
-        inset 1px 0 0 rgba(255, 255, 255, 0.8);
-}
-
-/* Sidebar content wrapper */
-section[data-testid="stSidebar"] > div {
-    background: transparent !important;
-}
-
-/* Sidebar headings */
-section[data-testid="stSidebar"] h3 {
-    color: #1e293b !important;
-    font-size: 1.4rem !important;
-    font-weight: 700 !important;
-    margin: 25px 0 15px 0 !important;
-    padding: 10px 0 !important;
-    position: relative !important;
-    letter-spacing: -0.3px;
-}
-
-/* Gradient underline for sidebar headings */
-section[data-testid="stSidebar"] h3::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 40px;
-    height: 3px;
-    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-    border-radius: 2px;
-    transition: width 0.3s ease;
-}
-
-section[data-testid="stSidebar"] h3:hover::after {
-    width: 60px;
-}
-
-/* Sidebar country info card */
-.sidebar-country-card {
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(59, 130, 246, 0.15);
-    border-radius: 16px;
-    padding: 18px;
-    margin: 20px 0;
-    transition: all 0.3s ease;
-    box-shadow: 
-        0 4px 20px rgba(0, 0, 0, 0.03),
-        0 2px 8px rgba(59, 130, 246, 0.05);
-}
-
-.sidebar-country-card:hover {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(59, 130, 246, 0.3);
-    transform: translateY(-2px);
-    box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.06),
-        0 4px 16px rgba(59, 130, 246, 0.08);
-}
-
-/* Country flag animation */
-.country-flag {
-    font-size: 2.8rem;
-    display: inline-block;
-    animation: gentleFloat 6s ease-in-out infinite;
-    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
-}
-
-@keyframes gentleFloat {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    50% { transform: translateY(-5px) rotate(2deg); }
-}
-
-/* ===============================
-   SIDEBAR SELECT BOXES - FIXED
-================================ */
-
-/* Select box container */
-section[data-testid="stSidebar"] .stSelectbox {
-    margin: 15px 0 !important;
-}
-
-/* Select box label - Center aligned */
-section[data-testid="stSidebar"] .stSelectbox > label {
-    color: #475569 !important;
-    font-weight: 600 !important;
-    font-size: 1rem !important;
-    margin-bottom: 8px !important;
-    display: block !important;
-    text-align: center !important;
-    width: 100% !important;
-    padding: 0 10px !important;
-}
-
-/* Select box dropdown container */
-section[data-testid="stSidebar"] .stSelectbox > div > div {
-    background: rgba(255, 255, 255, 0.95) !important;
-    border: 1.5px solid rgba(0, 0, 0, 0.08) !important;
-    border-radius: 12px !important;
-    padding: 12px 16px !important;
-    transition: all 0.3s ease !important;
-    min-height: 48px !important;
-    display: flex !important;
-    align-items: center !important;
-    box-shadow: 
-        0 2px 12px rgba(0, 0, 0, 0.04),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
-}
-
-/* Hover state */
-section[data-testid="stSidebar"] .stSelectbox > div > div:hover {
-    border-color: rgba(59, 130, 246, 0.4) !important;
-    box-shadow: 
-        0 0 0 3px rgba(59, 130, 246, 0.1),
-        0 4px 16px rgba(0, 0, 0, 0.06) !important;
-}
-
-/* Focus state */
-section[data-testid="stSidebar"] .stSelectbox > div > div:focus-within {
-    border-color: #3b82f6 !important;
-    box-shadow: 
-        0 0 0 4px rgba(59, 130, 246, 0.15),
-        0 6px 20px rgba(0, 0, 0, 0.08) !important;
-}
-
-/* Selected value text - Centered */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div > div {
-    color: #1e293b !important;
-    font-weight: 500 !important;
-    font-size: 1rem !important;
-    text-align: center !important;
-    width: 100% !important;
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    min-height: 24px !important;
-    padding: 0 10px !important;
-}
-
-/* Dropdown arrow */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div:last-child {
-    color: #3b82f6 !important;
-    opacity: 0.7;
-    transition: all 0.3s ease;
-}
-
-section[data-testid="stSidebar"] .stSelectbox > div > div:hover > div:last-child {
-    opacity: 1;
-    transform: translateY(1px);
-}
-
-/* Dropdown menu */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"] {
-    background: rgba(255, 255, 255, 0.98) !important;
-    backdrop-filter: blur(20px) !important;
-    border: 1px solid rgba(0, 0, 0, 0.08) !important;
-    border-radius: 12px !important;
-    margin-top: 8px !important;
-    box-shadow: 
-        0 10px 40px rgba(0, 0, 0, 0.1),
-        0 4px 20px rgba(59, 130, 246, 0.08) !important;
-    overflow: hidden !important;
-}
-
-/* Dropdown menu items */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"] > div {
-    background: transparent !important;
-}
-
-/* Individual dropdown items */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"] > div > div {
-    color: #475569 !important;
-    font-weight: 500 !important;
-    font-size: 0.95rem !important;
-    padding: 12px 16px !important;
-    min-height: 44px !important;
-    display: flex !important;
-    align-items: center !important;
-    transition: all 0.2s ease !important;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.03) !important;
-}
-
-/* Last item no border */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"] > div:last-child > div {
-    border-bottom: none !important;
-}
-
-/* Hover state for dropdown items */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"] > div > div:hover {
-    background: rgba(59, 130, 246, 0.08) !important;
-    color: #1e40af !important;
-    padding-left: 20px !important;
-}
-
-/* Selected item in dropdown */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"] > div > div[aria-selected="true"] {
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.08)) !important;
-    color: #1e40af !important;
-    font-weight: 600 !important;
-}
-
-/* Dropdown scrollbar */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"]::-webkit-scrollbar {
-    width: 8px;
-}
-
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"]::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.02);
-    border-radius: 4px;
-    margin: 4px;
-}
-
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"]::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #3b82f6, #8b5cf6);
-    border-radius: 4px;
-}
-
-section[data-testid="stSidebar"] .stSelectbox > div > div > div[data-baseweb="menu"]::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #2563eb, #7c3aed);
-}
-
-/* Sidebar buttons */
-section[data-testid="stSidebar"] .stButton > button {
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-    border: none;
-    border-radius: 12px;
-    padding: 12px 20px;
-    font-weight: 600;
-    color: white;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 
-        0 4px 16px rgba(59, 130, 246, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.3);
-    width: 100%;
-    margin: 8px 0;
-}
-
-section[data-testid="stSidebar"] .stButton > button:hover {
-    transform: translateY(-3px);
-    box-shadow: 
-        0 8px 24px rgba(59, 130, 246, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.4);
-    background: linear-gradient(135deg, #2563eb, #7c3aed);
-}
-
-/* Template cards in sidebar */
-.template-card {
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(0, 0, 0, 0.06);
-    border-radius: 14px;
-    padding: 16px;
-    margin: 12px 0;
-    transition: all 0.3s ease;
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
-}
-
-.template-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.template-card:hover {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(59, 130, 246, 0.3);
-    transform: translateX(4px);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
-}
-
-.template-card:hover::before {
-    opacity: 1;
-}
-
-/* Place preview cards in sidebar */
-.place-preview-card {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    border-radius: 12px;
-    padding: 14px;
-    margin: 10px 0;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-}
-
-.place-preview-card:hover {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(59, 130, 246, 0.2);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04);
-}
-
-/* Sidebar stats cards */
-.sidebar-stat-card {
-    background: rgba(255, 255, 255, 0.85);
-    border: 1px solid rgba(59, 130, 246, 0.1);
-    border-radius: 16px;
-    padding: 18px;
-    text-align: center;
-    transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
-}
-
-.sidebar-stat-card:hover {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(59, 130, 246, 0.3);
-    transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.08);
-}
-
-.sidebar-stat-icon {
-    font-size: 2rem;
-    margin-bottom: 10px;
-    display: inline-block;
-    color: #3b82f6;
-    filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.2));
-}
-
-.sidebar-stat-number {
-    font-size: 2rem;
-    font-weight: 800;
-    color: #1e40af;
-    margin: 8px 0;
-    background: linear-gradient(90deg, #1e40af, #7c3aed);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.sidebar-stat-label {
-    color: #475569;
-    font-size: 0.85rem;
-    font-weight: 500;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
-}
-
-/* Sidebar checkboxes and sliders */
-section[data-testid="stSidebar"] .stCheckbox > label,
-section[data-testid="stSidebar"] .stSlider > label {
-    color: #475569;
-    font-weight: 500;
-    font-size: 0.9rem;
-    text-align: center !important;
-    width: 100% !important;
-    display: block !important;
-    margin-bottom: 10px !important;
-}
-
-section[data-testid="stSidebar"] .stCheckbox > div > div {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 8px;
-    padding: 6px;
-}
-
-/* Sidebar sliders */
-section[data-testid="stSidebar"] .stSlider > div > div {
-    padding: 0 10px !important;
-}
-
-/* Sidebar dividers */
-section[data-testid="stSidebar"] hr {
-    margin: 25px 0;
-    border: none;
-    height: 1px;
-    background: linear-gradient(90deg, 
-        transparent, 
-        rgba(59, 130, 246, 0.2), 
-        transparent);
-}
-
-/* Scrollbar for sidebar */
-section[data-testid="stSidebar"] ::-webkit-scrollbar {
-    width: 8px;
-}
-
-section[data-testid="stSidebar"] ::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.02);
-    border-radius: 4px;
-}
-
-section[data-testid="stSidebar"] ::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #3b82f6, #8b5cf6);
-    border-radius: 4px;
-}
-
-section[data-testid="stSidebar"] ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #2563eb, #7c3aed);
-}
-
-/* Sidebar success messages */
-section[data-testid="stSidebar"] .stAlert {
-    background: rgba(16, 185, 129, 0.1);
-    border: 1px solid rgba(16, 185, 129, 0.2);
-    border-radius: 12px;
-    color: #047857;
-    font-weight: 500;
-    text-align: center !important;
-    padding: 15px !important;
-    margin: 10px 0 !important;
-}
-
-/* Sidebar loading spinner */
-section[data-testid="stSidebar"] .stSpinner > div > div {
-    background: linear-gradient(90deg, #3b82f6, #8b5cf6) !important;
-}
-
-/* Responsive sidebar adjustments */
-@media (max-width: 768px) {
-    section[data-testid="stSidebar"] {
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-    }
-    
-    section[data-testid="stSidebar"] h3 {
-        font-size: 1.2rem !important;
-    }
-    
-    .sidebar-country-card,
-    .sidebar-stat-card {
-        padding: 14px;
-    }
-    
-    .country-flag {
-        font-size: 2.2rem;
-    }
-    
-    .sidebar-stat-number {
-        font-size: 1.8rem;
-    }
-    
-    /* Mobile select boxes */
-    section[data-testid="stSidebar"] .stSelectbox > label {
-        font-size: 0.95rem !important;
-    }
-    
-    section[data-testid="stSidebar"] .stSelectbox > div > div {
-        padding: 10px 14px !important;
-        min-height: 44px !important;
-    }
-    
-    section[data-testid="stSidebar"] .stSelectbox > div > div > div > div {
-        font-size: 0.95rem !important;
-    }
-}
-
-/* Sidebar gradient overlay effect */
-.sidebar-gradient-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(
-        135deg,
-        rgba(59, 130, 246, 0.03) 0%,
-        rgba(139, 92, 246, 0.02) 50%,
-        rgba(236, 72, 153, 0.01) 100%
-    );
-    pointer-events: none;
-    z-index: -1;
-}
-
-/* Sidebar text elements */
-section[data-testid="stSidebar"] p,
-section[data-testid="stSidebar"] span,
-section[data-testid="stSidebar"] div {
-    color: #475569 !important;
-}
-
-/* Strong text in sidebar */
-section[data-testid="stSidebar"] strong {
-    color: #1e293b !important;
-}
-
-/* Sidebar input focus states */
-section[data-testid="stSidebar"] input:focus,
-section[data-testid="stSidebar"] textarea:focus,
-section[data-testid="stSidebar"] select:focus {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
-    outline: none !important;
-}
-
-
-
-
-/* Placeholder text for empty select boxes */
-section[data-testid="stSidebar"] .stSelectbox > div > div > div > div:empty::before {
-    content: "Select an option";
-    color: #94a3b8 !important;
-    font-weight: 400 !important;
-    font-style: italic !important;
-}
-    
     /* Enhanced Card styling - White Theme */
     .place-card {
         background: #ffffff;
@@ -1042,17 +398,6 @@ section[data-testid="stSidebar"] .stSelectbox > div > div > div > div:empty::bef
     
     .image-container:hover img {
         transform: scale(1.15);
-    }
-    
-    .image-overlay {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
-        padding: 15px;
-        color: white;
-        font-size: 0.8rem;
     }
     
     /* Badge styling */
@@ -1151,280 +496,163 @@ section[data-testid="stSidebar"] .stSelectbox > div > div > div > div:empty::bef
     }
     
     /* ===============================
-   ENHANCED STAT CARDS
-================================ */
-
-/* Main stat card container */
-.stat-card {
-    background: linear-gradient(145deg, #ffffff, #f8fafc);
-    border-radius: 24px;
-    padding: 30px 20px;
-    text-align: center;
-    border: 1px solid rgba(59, 130, 246, 0.15);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    backdrop-filter: blur(10px);
-    position: relative;
-    overflow: hidden;
-    min-height: 200px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.04),
-        0 4px 16px rgba(59, 130, 246, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-/* Gradient border effect */
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, 
-        #3b82f6 0%, 
-        #8b5cf6 25%, 
-        #ec4899 50%, 
-        #f59e0b 75%, 
-        #10b981 100%);
-    border-radius: 24px 24px 0 0;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: 1;
-}
-
-/* Background pattern */
-.stat-card::after {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(
-        circle at center,
-        rgba(59, 130, 246, 0.08) 0%,
-        rgba(139, 92, 246, 0.04) 25%,
-        transparent 50%
-    );
-    opacity: 0;
-    transition: opacity 0.5s ease;
-    z-index: 0;
-    pointer-events: none;
-}
-
-/* Hover effects */
-.stat-card:hover {
-    transform: translateY(-8px) scale(1.02);
-    border-color: rgba(59, 130, 246, 0.3);
-    box-shadow: 
-        0 20px 60px rgba(59, 130, 246, 0.12),
-        0 12px 40px rgba(0, 0, 0, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-.stat-card:hover::before {
-    opacity: 1;
-}
-
-.stat-card:hover::after {
-    opacity: 1;
-    animation: gentlePulse 4s ease-in-out infinite;
-}
-
-@keyframes gentlePulse {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.6; }
-}
-
-/* Icon styling */
-.stat-icon {
-    font-size: 3rem;
-    margin-bottom: 20px;
-    display: inline-block;
-    position: relative;
-    z-index: 2;
-    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
-    transition: all 0.3s ease;
-}
-
-.stat-card:hover .stat-icon {
-    transform: scale(1.2) rotate(5deg);
-    filter: drop-shadow(0 6px 12px rgba(59, 130, 246, 0.3));
-}
-
-/* Number styling with gradient animation */
-.stat-number {
-    font-size: 2.8rem;
-    font-weight: 800;
-    margin: 15px 0;
-    position: relative;
-    z-index: 2;
-    background: linear-gradient(
-        135deg,
-        #1e40af 0%,
-        #3b82f6 25%,
-        #8b5cf6 50%,
-        #ec4899 75%,
-        #f59e0b 100%
-    );
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    background-size: 200% auto;
-    animation: gradientShift 6s ease-in-out infinite;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-@keyframes gradientShift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-}
-
-/* Label styling */
-.stat-label {
-    color: #475569;
-    font-size: 0.95rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    position: relative;
-    z-index: 2;
-    padding: 8px 16px;
-    background: rgba(59, 130, 246, 0.08);
-    border-radius: 12px;
-    border: 1px solid rgba(59, 130, 246, 0.15);
-    backdrop-filter: blur(5px);
-    transition: all 0.3s ease;
-}
-
-.stat-card:hover .stat-label {
-    background: rgba(59, 130, 246, 0.15);
-    border-color: rgba(59, 130, 246, 0.3);
-    color: #1e40af;
-    transform: translateY(-2px);
-}
-
-/* Counter animation for numbers */
-@keyframes countUp {
-    from { 
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to { 
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.stat-number.animated {
-    animation: countUp 1s ease-out forwards;
-}
-
-/* Sparkle effect (optional) */
-.sparkle {
-    position: absolute;
-    width: 20px;
-    height: 20px;
-    background: linear-gradient(45deg, #3b82f6, #8b5cf6);
-    border-radius: 50%;
-    filter: blur(2px);
-    opacity: 0;
-    pointer-events: none;
-}
-
-.stat-card:hover .sparkle {
-    animation: sparkleFloat 2s ease-out;
-}
-
-@keyframes sparkleFloat {
-    0% {
-        opacity: 0;
-        transform: translate(0, 0) scale(0);
-    }
-    50% {
-        opacity: 0.8;
-        transform: translate(var(--x), var(--y)) scale(1);
-    }
-    100% {
-        opacity: 0;
-        transform: translate(calc(var(--x) * 1.5), calc(var(--y) * 1.5)) scale(0);
-    }
-}
-
-/* Mobile responsiveness */
-@media (max-width: 768px) {
+       ENHANCED STAT CARDS
+    ================================ */
+    
+    /* Main stat card container */
     .stat-card {
-        padding: 20px 15px;
-        min-height: 160px;
-        border-radius: 20px;
-    }
-    
-    .stat-icon {
-        font-size: 2.2rem;
-        margin-bottom: 15px;
-    }
-    
-    .stat-number {
-        font-size: 2.2rem;
-        margin: 10px 0;
-    }
-    
-    .stat-label {
-        font-size: 0.85rem;
-        padding: 6px 12px;
-    }
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-    .stat-card {
-        background: linear-gradient(145deg, #1e293b, #0f172a);
-        border-color: rgba(255, 255, 255, 0.1);
+        background: linear-gradient(145deg, #ffffff, #f8fafc);
+        border-radius: 24px;
+        padding: 30px 20px;
+        text-align: center;
+        border: 1px solid rgba(59, 130, 246, 0.15);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(10px);
+        position: relative;
+        overflow: hidden;
+        min-height: 200px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
         box-shadow: 
-            0 8px 32px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            0 8px 32px rgba(0, 0, 0, 0.04),
+            0 4px 16px rgba(59, 130, 246, 0.05),
+            inset 0 1px 0 rgba(255, 255, 255, 0.6);
     }
     
+    /* Gradient border effect */
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, 
+            #3b82f6 0%, 
+            #8b5cf6 25%, 
+            #ec4899 50%, 
+            #f59e0b 75%, 
+            #10b981 100%);
+        border-radius: 24px 24px 0 0;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: 1;
+    }
+    
+    /* Background pattern */
+    .stat-card::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(
+            circle at center,
+            rgba(59, 130, 246, 0.08) 0%,
+            rgba(139, 92, 246, 0.04) 25%,
+            transparent 50%
+        );
+        opacity: 0;
+        transition: opacity 0.5s ease;
+        z-index: 0;
+        pointer-events: none;
+    }
+    
+    /* Hover effects */
     .stat-card:hover {
-        border-color: rgba(59, 130, 246, 0.4);
+        transform: translateY(-8px) scale(1.02);
+        border-color: rgba(59, 130, 246, 0.3);
         box-shadow: 
-            0 20px 60px rgba(59, 130, 246, 0.15),
-            0 12px 40px rgba(0, 0, 0, 0.3);
+            0 20px 60px rgba(59, 130, 246, 0.12),
+            0 12px 40px rgba(0, 0, 0, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.8);
     }
     
+    .stat-card:hover::before {
+        opacity: 1;
+    }
+    
+    .stat-card:hover::after {
+        opacity: 1;
+        animation: gentlePulse 4s ease-in-out infinite;
+    }
+    
+    @keyframes gentlePulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.6; }
+    }
+    
+    /* Icon styling */
+    .stat-icon {
+        font-size: 3rem;
+        margin-bottom: 20px;
+        display: inline-block;
+        position: relative;
+        z-index: 2;
+        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        transition: all 0.3s ease;
+    }
+    
+    .stat-card:hover .stat-icon {
+        transform: scale(1.2) rotate(5deg);
+        filter: drop-shadow(0 6px 12px rgba(59, 130, 246, 0.3));
+    }
+    
+    /* Number styling with gradient animation */
+    .stat-number {
+        font-size: 2.8rem;
+        font-weight: 800;
+        margin: 15px 0;
+        position: relative;
+        z-index: 2;
+        background: linear-gradient(
+            135deg,
+            #1e40af 0%,
+            #3b82f6 25%,
+            #8b5cf6 50%,
+            #ec4899 75%,
+            #f59e0b 100%
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        background-size: 200% auto;
+        animation: gradientShift 6s ease-in-out infinite;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    
+    @keyframes gradientShift {
+        0%, 100% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+    }
+    
+    /* Label styling */
     .stat-label {
-        color: #cbd5e1;
-        background: rgba(59, 130, 246, 0.15);
-        border-color: rgba(59, 130, 246, 0.25);
+        color: #475569;
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        position: relative;
+        z-index: 2;
+        padding: 8px 16px;
+        background: rgba(59, 130, 246, 0.08);
+        border-radius: 12px;
+        border: 1px solid rgba(59, 130, 246, 0.15);
+        backdrop-filter: blur(5px);
+        transition: all 0.3s ease;
     }
     
     .stat-card:hover .stat-label {
-        color: #60a5fa;
-        background: rgba(59, 130, 246, 0.25);
+        background: rgba(59, 130, 246, 0.15);
+        border-color: rgba(59, 130, 246, 0.3);
+        color: #1e40af;
+        transform: translateY(-2px);
     }
-}
-
-/* Loading shimmer effect */
-.stat-card.loading {
-    background: linear-gradient(
-        90deg,
-        #f1f5f9 0%,
-        #e2e8f0 50%,
-        #f1f5f9 100%
-    );
-    background-size: 200% 100%;
-    animation: loadingShimmer 1.5s infinite linear;
-}
-
-@keyframes loadingShimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
-}
-
+    
     /* Schedule cards */
     .schedule-card {
         background: #ffffff;
@@ -1493,15 +721,6 @@ section[data-testid="stSidebar"] .stSelectbox > div > div > div > div:empty::bef
         background: linear-gradient(135deg, #2563eb, #7c3aed);
     }
     
-    /* Gradient text */
-    .gradient-text {
-        background: linear-gradient(90deg, #1e40af, #7c3aed, #be185d);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        font-weight: 800;
-    }
-    
     /* Tag styling */
     .place-tag {
         display: inline-block;
@@ -1541,477 +760,829 @@ section[data-testid="stSidebar"] .stSelectbox > div > div > div > div:empty::bef
         color: #334155 !important;
     }
     
-    /* Sidebar improvements */
-    .css-1d391kg {
-        border-right: 1px solid #e2e8f0;
-    }
-    
-    /* Input fields */
-    .stTextInput > div > div > input,
-    .stTextArea > div > div > textarea,
-    .stSelectbox > div > div > select {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        color: #1e293b;
-    }
-    
-    /* Checkbox and select */
-    .stCheckbox > label,
-    .stSelectbox > label {
-        color: #334155;
-    }
-    
-    /* Markdown boxes */
-    .stMarkdown {
-        color: #334155;
-    }
-    
-    /* Info, success, warning, error boxes */
-    .stAlert {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-    }
-    
-    /* Tab styling */
-    .stTabs [data-baseweb="tab-list"] {
-        background: #f8fafc;
-        border-radius: 12px;
-        padding: 8px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 8px;
-        padding: 10px 20px;
-    }
-    
-    /* Divider */
-    hr {
-        border-color: #e2e8f0;
-    }
-    
-    /* Tooltips */
-    .stTooltip {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        color: #334155;
-    }
-    
-    /* Metric containers */
-    .stMetric {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 20px;
-    }
-    
-    /* Progress bar */
-    .stProgress > div > div > div {
-        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-    }
-    
-    /* Data editor */
-    .stDataFrame {
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
+    /* ===============================
+       TRAVEL INQUIRY CARD
+    ================================ */
+
+    /* Travel Inquiry Card Container */
+    .travel-inquiry-card {
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+        border: 1px solid rgba(59, 130, 246, 0.15);
+        border-radius: 20px;
+        padding: 30px;
+        margin: 20px 0;
+        box-shadow: 
+            0 12px 40px rgba(0, 0, 0, 0.06),
+            0 4px 16px rgba(59, 130, 246, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.6);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
         overflow: hidden;
     }
     
-    /* Chat messages */
-    .stChatMessage {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
+    .travel-inquiry-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 
+            0 20px 60px rgba(0, 0, 0, 0.08),
+            0 8px 24px rgba(59, 130, 246, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        border-color: rgba(59, 130, 246, 0.25);
+        background: rgba(255, 255, 255, 0.95);
     }
     
-    /* Expander */
-    .streamlit-expanderHeader {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-    }
-
-    /* ===============================
-   TRAVEL INQUIRY CARD
-================================ */
-
-/* Travel Inquiry Card Container */
-.travel-inquiry-card {
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    border: 1px solid rgba(59, 130, 246, 0.15);
-    border-radius: 20px;
-    padding: 30px;
-    margin: 20px 0;
-    box-shadow: 
-        0 12px 40px rgba(0, 0, 0, 0.06),
-        0 4px 16px rgba(59, 130, 246, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.6);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-}
-
-.travel-inquiry-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 
-        0 20px 60px rgba(0, 0, 0, 0.08),
-        0 8px 24px rgba(59, 130, 246, 0.12),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8);
-    border-color: rgba(59, 130, 246, 0.25);
-    background: rgba(255, 255, 255, 0.95);
-}
-
-/* Card gradient border top */
-.travel-inquiry-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
-    border-radius: 20px 20px 0 0;
-    z-index: 2;
-}
-
-/* Card background glow effect */
-.travel-inquiry-card::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 120%;
-    height: 120%;
-    background: radial-gradient(circle at center,
-        rgba(59, 130, 246, 0.08) 0%,
-        rgba(139, 92, 246, 0.04) 30%,
-        transparent 60%);
-    transform: translate(-50%, -50%);
-    z-index: 1;
-    pointer-events: none;
-    animation: gentleGlow 6s ease-in-out infinite;
-}
-
-@keyframes gentleGlow {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 0.6; }
-}
-
-/* Card header */
-.inquiry-card-header {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    margin-bottom: 25px;
-    position: relative;
-    z-index: 3;
-}
-
-.inquiry-card-icon {
-    font-size: 2.5rem;
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    filter: drop-shadow(0 4px 8px rgba(59, 130, 246, 0.2));
-    animation: iconFloat 4s ease-in-out infinite;
-}
-
-@keyframes iconFloat {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    50% { transform: translateY(-5px) rotate(5deg); }
-}
-
-.inquiry-card-title {
-    color: #1e293b;
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin: 0;
-    background: linear-gradient(90deg, #1e40af, #7c3aed);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    letter-spacing: -0.5px;
-}
-
-.inquiry-card-subtitle {
-    color: #64748b;
-    font-size: 0.95rem;
-    margin-top: 5px;
-    font-weight: 500;
-    padding-left: 55px;
-}
-
-/* Enhanced text area container */
-.inquiry-textarea-container {
-    position: relative;
-    z-index: 3;
-}
-
-/* Custom text area styling */
-.custom-textarea {
-    background: rgba(255, 255, 255, 0.8) !important;
-    backdrop-filter: blur(10px);
-    border: 1.5px solid rgba(0, 0, 0, 0.08) !important;
-    border-radius: 16px !important;
-    padding: 20px !important;
-    font-size: 1rem !important;
-    line-height: 1.6 !important;
-    color: #1e293b !important;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    transition: all 0.3s ease !important;
-    box-shadow: 
-        0 4px 20px rgba(0, 0, 0, 0.02),
-        inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
-    min-height: 280px !important;
-    resize: vertical !important;
-}
-
-.custom-textarea::placeholder {
-    color: #94a3b8 !important;
-    font-style: italic !important;
-    font-weight: 400 !important;
-}
-
-.custom-textarea:focus {
-    outline: none !important;
-    border-color: #3b82f6 !important;
-    box-shadow: 
-        0 0 0 4px rgba(59, 130, 246, 0.1),
-        0 8px 32px rgba(0, 0, 0, 0.04),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
-    background: rgba(255, 255, 255, 0.95) !important;
-}
-
-.custom-textarea:hover {
-    border-color: rgba(59, 130, 246, 0.3) !important;
-    box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.03),
-        inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
-}
-
-/* Text area scrollbar */
-.custom-textarea::-webkit-scrollbar {
-    width: 10px;
-}
-
-.custom-textarea::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.02);
-    border-radius: 5px;
-    margin: 5px;
-}
-
-.custom-textarea::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #3b82f6, #8b5cf6);
-    border-radius: 5px;
-    border: 3px solid rgba(255, 255, 255, 0.8);
-}
-
-.custom-textarea::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #2563eb, #7c3aed);
-}
-
-/* Card footer with tips */
-.inquiry-card-footer {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 20px;
-    padding: 15px;
-    background: rgba(59, 130, 246, 0.05);
-    border: 1px solid rgba(59, 130, 246, 0.1);
-    border-radius: 14px;
-    position: relative;
-    z-index: 3;
-    animation: fadeInUp 0.6s ease-out;
-}
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.tips-icon {
-    font-size: 1.5rem;
-    color: #3b82f6;
-    animation: gentleBounce 2s ease-in-out infinite;
-}
-
-@keyframes gentleBounce {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-}
-
-.tips-content {
-    flex: 1;
-}
-
-.tips-title {
-    color: #1e40af;
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 4px;
-}
-
-.tips-text {
-    color: #475569;
-    font-size: 0.85rem;
-    line-height: 1.5;
-    margin: 0;
-}
-
-/* Character counter (optional) */
-.char-counter {
-    position: absolute;
-    bottom: 15px;
-    right: 20px;
-    font-size: 0.8rem;
-    color: #94a3b8;
-    font-weight: 500;
-    z-index: 4;
-    background: rgba(255, 255, 255, 0.8);
-    padding: 4px 10px;
-    border-radius: 12px;
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    transition: all 0.3s ease;
-}
-
-.char-counter.active {
-    color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
-    border-color: rgba(59, 130, 246, 0.2);
-}
-
-/* Card status indicators */
-.card-status {
-    position: absolute;
-    top: 30px;
-    right: 30px;
-    z-index: 3;
-}
-
-.status-dot {
-    width: 12px;
-    height: 12px;
-    background: linear-gradient(135deg, #10b981, #3b82f6);
-    border-radius: 50%;
-    animation: statusPulse 2s ease-in-out infinite;
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
-}
-
-@keyframes statusPulse {
-    0%, 100% { 
-        transform: scale(1);
-        box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
-    }
-    50% { 
-        transform: scale(1.2);
-        box-shadow: 0 0 30px rgba(16, 185, 129, 0.6);
-    }
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .travel-inquiry-card {
-        padding: 20px;
-        border-radius: 16px;
-        margin: 15px 0;
+    /* Card gradient border top */
+    .travel-inquiry-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+        border-radius: 20px 20px 0 0;
+        z-index: 2;
     }
     
+    /* Card header */
     .inquiry-card-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 25px;
+        position: relative;
+        z-index: 3;
+    }
+    
+    .inquiry-card-icon {
+        font-size: 2.5rem;
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        filter: drop-shadow(0 4px 8px rgba(59, 130, 246, 0.2));
+        animation: iconFloat 4s ease-in-out infinite;
+    }
+    
+    @keyframes iconFloat {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        50% { transform: translateY(-5px) rotate(5deg); }
     }
     
     .inquiry-card-title {
-        font-size: 1.5rem;
+        color: #1e293b;
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin: 0;
+        background: linear-gradient(90deg, #1e40af, #7c3aed);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.5px;
     }
     
     .inquiry-card-subtitle {
-        padding-left: 0;
+        color: #64748b;
+        font-size: 0.95rem;
+        margin-top: 5px;
+        font-weight: 500;
+        padding-left: 55px;
     }
     
-    .custom-textarea {
-        padding: 15px !important;
-        font-size: 0.95rem !important;
-    }
-    
+    /* Card footer with tips */
     .inquiry-card-footer {
-        flex-direction: column;
-        text-align: center;
-        gap: 10px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 20px;
+        padding: 15px;
+        background: rgba(59, 130, 246, 0.05);
+        border: 1px solid rgba(59, 130, 246, 0.1);
+        border-radius: 14px;
+        position: relative;
+        z-index: 3;
+        animation: fadeInUp 0.6s ease-out;
     }
     
-    .card-status {
-        top: 20px;
-        right: 20px;
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
-}
-
-/* Loading state for text area */
-.custom-textarea.loading {
-    background: linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0.8) 0%,
-        rgba(248, 250, 252, 0.9) 50%,
-        rgba(255, 255, 255, 0.8) 100%
-    ) !important;
-    background-size: 200% 100% !important;
-    animation: loadingShimmer 2s ease-in-out infinite !important;
-}
-
-@keyframes loadingShimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
-}
-
-/* Focus indicator animation */
-.focus-indicator {
-    position: absolute;
-    top: -2px;
-    left: -2px;
-    right: -2px;
-    bottom: -2px;
-    border-radius: 18px;
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899);
-    z-index: 2;
-    opacity: 0;
-    animation: focusPulse 2s ease-in-out infinite;
-    pointer-events: none;
-}
-
-@keyframes focusPulse {
-    0%, 100% { opacity: 0; }
-    50% { opacity: 0.1; }
-}
-
-.custom-textarea:focus ~ .focus-indicator {
-    opacity: 0.2;
-    animation: none;
-}
+    
+    .tips-icon {
+        font-size: 1.5rem;
+        color: #3b82f6;
+        animation: gentleBounce 2s ease-in-out infinite;
+    }
+    
+    @keyframes gentleBounce {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+    }
+    
+    .tips-content {
+        flex: 1;
+    }
+    
+    .tips-title {
+        color: #1e40af;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    
+    .tips-text {
+        color: #475569;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        margin: 0;
+    }
+    
+   /* ===============================
+       ENHANCED ITINERARY HEADER WITH CLEAR BACKGROUND
+    ================================ */
+    .itinerary-header-container {
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 60px 30px;
+        background: 
+            linear-gradient(
+                rgba(15, 23, 42, 0.35),  /* Significantly reduced opacity */
+                rgba(30, 41, 59, 0.25)    /* Very transparent gradient */
+            ),
+            url('https://images.unsplash.com/photo-1551632811-561732d1e306?ixlib=rb-4.0.3&auto=format&fit=crop&w=2560&q=100');
+        background-size: cover;
+        background-position: center 40%; /* Adjusted to show more of the mountains */
+        background-attachment: fixed;
+        border-radius: 30px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 
+            0 25px 80px rgba(0, 0, 0, 0.3),
+            0 10px 40px rgba(59, 130, 246, 0.2),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(2px);
+    }
+    
+    .itinerary-header-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(
+            135deg,
+            rgba(59, 130, 246, 0.15) 0%,
+            rgba(139, 92, 246, 0.1) 50%,
+            rgba(236, 72, 153, 0.05) 100%
+        );
+        animation: backgroundPulse 12s ease-in-out infinite;
+        mix-blend-mode: overlay;
+    }
+    
+    .itinerary-header-container::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 5px;
+        background: linear-gradient(90deg, 
+            rgba(59, 130, 246, 0.9) 0%, 
+            rgba(139, 92, 246, 0.8) 25%, 
+            rgba(236, 72, 153, 0.7) 50%, 
+            rgba(245, 158, 11, 0.6) 75%, 
+            rgba(16, 185, 129, 0.5) 100%);
+        border-radius: 30px 30px 0 0;
+        z-index: 2;
+        box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+    }
+    
+    @keyframes backgroundPulse {
+        0%, 100% { 
+            opacity: 0.4;
+            transform: scale(1);
+        }
+        50% { 
+            opacity: 0.6;
+            transform: scale(1.02);
+        }
+    }
+    
+    .itinerary-header-content {
+        position: relative;
+        z-index: 3;
+        padding: 20px;
+        background: rgba(15, 23, 42, 0.2);
+        border-radius: 20px;
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 
+            0 20px 40px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        margin: 0 auto;
+        max-width: 900px;
+    }
+    
+    .itinerary-header-flag {
+        font-size: 5rem;
+        margin-bottom: 25px;
+        display: inline-block;
+        animation: flagFloat 8s ease-in-out infinite;
+        filter: 
+            drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4))
+            drop-shadow(0 0 30px rgba(59, 130, 246, 0.3));
+        background: linear-gradient(135deg, 
+            rgba(255, 255, 255, 0.25),
+            rgba(255, 255, 255, 0.1));
+        padding: 25px;
+        border-radius: 50%;
+        backdrop-filter: blur(15px);
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 
+            inset 0 0 30px rgba(255, 255, 255, 0.2),
+            0 20px 50px rgba(0, 0, 0, 0.3);
+        transform-style: preserve-3d;
+        perspective: 1000px;
+        color: white !important;
+    }
+    
+    @keyframes flagFloat {
+        0%, 100% { 
+            transform: 
+                translateY(0) 
+                rotateX(0deg) 
+                rotateY(0deg)
+                scale(1);
+        }
+        33% { 
+            transform: 
+                translateY(-12px) 
+                rotateX(5deg) 
+                rotateY(5deg)
+                scale(1.08);
+        }
+        66% { 
+            transform: 
+                translateY(-6px) 
+                rotateX(-3deg) 
+                rotateY(-3deg)
+                scale(1.04);
+        }
+    }
+    
+    .itinerary-header-title {
+        font-size: 3.8rem;
+        font-weight: 900;
+        margin-bottom: 25px;
+        background: linear-gradient(135deg, 
+            #ffffff 0%,
+            #f8fafc 25%,
+            #f1f5f9 50%,
+            #f8fafc 75%,
+            #ffffff 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: white; /* Changed to white */
+        background-clip: text;
+        color: white !important; /* Added for fallback */
+        text-shadow: 
+            0 2px 4px rgba(0, 0, 0, 0.1),
+            0 0 50px rgba(59, 130, 246, 0.15);
+        letter-spacing: -0.5px;
+        line-height: 1.1;
+        padding: 0 20px;
+        position: relative;
+        display: inline-block;
+    }
+    
+    .itinerary-header-title::after {
+        content: '';
+        position: absolute;
+        bottom: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 200px;
+        height: 3px;
+        background: linear-gradient(90deg, 
+            transparent 0%,
+            rgba(59, 130, 246, 0.6) 50%,
+            transparent 100%);
+        border-radius: 3px;
+    }
+    
+    .itinerary-header-details {
+        color: white !important; /* Changed to white */
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 30px;
+        flex-wrap: wrap;
+        font-weight: 600;
+        padding: 0 20px;
+    }
+    
+    .itinerary-header-details span {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 24px;
+        background: linear-gradient(135deg,
+            rgba(255, 255, 255, 0.15),
+            rgba(255, 255, 255, 0.05));
+        border-radius: 50px;
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 
+            0 8px 32px rgba(0, 0, 0, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        position: relative;
+        overflow: hidden;
+        color: white !important; /* Added for the span text */
+    }
+    
+    .itinerary-header-details span::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 255, 255, 0.1),
+            transparent);
+        transition: left 0.6s ease;
+    }
+    
+    .itinerary-header-details span:hover {
+        background: linear-gradient(135deg,
+            rgba(255, 255, 255, 0.25),
+            rgba(255, 255, 255, 0.15));
+        transform: 
+            translateY(-5px)
+            scale(1.05);
+        box-shadow: 
+            0 20px 40px rgba(0, 0, 0, 0.25),
+            0 0 60px rgba(59, 130, 246, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        color: white !important;
+    }
+    
+    .itinerary-header-details span:hover::before {
+        left: 100%;
+    }
+    
+    .itinerary-header-meta {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 25px;
+        flex-wrap: wrap;
+        margin-top: 30px;
+        padding-top: 25px;
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
+        position: relative;
+    }
+    
+    .itinerary-header-meta::before {
+        content: '';
+        position: absolute;
+        top: -1px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100px;
+        height: 2px;
+        background: linear-gradient(90deg,
+            transparent,
+            rgba(59, 130, 246, 0.5),
+            transparent);
+    }
+    
+    .itinerary-header-meta-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 28px;
+        background: linear-gradient(135deg,
+            rgba(16, 185, 129, 0.25),
+            rgba(16, 185, 129, 0.1));
+        border: 1px solid rgba(16, 185, 129, 0.4);
+        border-radius: 50px;
+        color: white !important; /* Changed to white */
+        font-weight: 700;
+        font-size: 1.1rem;
+        backdrop-filter: blur(15px);
+        transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 
+            0 10px 30px rgba(16, 185, 129, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .itinerary-header-meta-item::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg,
+            rgba(255, 255, 255, 0.1),
+            transparent);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    @keyframes metaPulse {
+        0%, 100% { 
+            box-shadow: 
+                0 10px 30px rgba(16, 185, 129, 0.2),
+                0 0 20px rgba(16, 185, 129, 0.3);
+        }
+        50% { 
+            box-shadow: 
+                0 15px 40px rgba(16, 185, 129, 0.3),
+                0 0 40px rgba(16, 185, 129, 0.5);
+            transform: translateY(-4px);
+        }
+    }
+    
+    .itinerary-header-meta-item {
+        animation: metaPulse 5s ease-in-out infinite;
+    }
+    
+    .itinerary-header-meta-item:hover {
+        background: linear-gradient(135deg,
+            rgba(16, 185, 129, 0.35),
+            rgba(16, 185, 129, 0.2));
+        border-color: rgba(16, 185, 129, 0.6);
+        transform: 
+            translateY(-8px)
+            scale(1.08);
+        box-shadow: 
+            0 25px 50px rgba(16, 185, 129, 0.3),
+            0 0 80px rgba(16, 185, 129, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        animation-play-state: paused;
+        color: white !important;
+    }
+    
+    .itinerary-header-meta-item:hover::before {
+        opacity: 1;
+    }
+    
+    /* Optional: Add some floating particles for extra depth */
+    .itinerary-header-container .particle {
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1);
+        animation: floatParticle 20s linear infinite;
+        z-index: 1;
+    }
+    
+    @keyframes floatParticle {
+        0% {
+            transform: translateY(100vh) translateX(0) rotate(0deg);
+        }
+        100% {
+            transform: translateY(-100vh) translateX(100px) rotate(360deg);
+        }
+    }
+    
+    /* Add particles dynamically with JavaScript or manually */
+    .particle:nth-child(1) {
+        width: 4px;
+        height: 4px;
+        left: 10%;
+        animation-delay: 0s;
+        animation-duration: 25s;
+    }
+    
+    .particle:nth-child(2) {
+        width: 3px;
+        height: 3px;
+        left: 30%;
+        animation-delay: 5s;
+        animation-duration: 30s;
+    }
+    
+    .particle:nth-child(3) {
+        width: 5px;
+        height: 5px;
+        left: 50%;
+        animation-delay: 10s;
+        animation-duration: 20s;
+    }
+    
+    .particle:nth-child(4) {
+        width: 4px;
+        height: 4px;
+        left: 70%;
+        animation-delay: 15s;
+        animation-duration: 35s;
+    }
+    
+    .particle:nth-child(5) {
+        width: 3px;
+        height: 3px;
+        left: 90%;
+        animation-delay: 20s;
+        animation-duration: 25s;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .itinerary-header-container {
+            padding: 40px 20px;
+            background-position: center;
+        }
+        
+        .itinerary-header-content {
+            padding: 15px;
+        }
+        
+        .itinerary-header-title {
+            font-size: 2.5rem;
+            color: white !important;
+        }
+        
+        .itinerary-header-flag {
+            font-size: 4rem;
+            padding: 20px;
+            color: white !important;
+        }
+        
+        .itinerary-header-details {
+            font-size: 1.2rem;
+            gap: 15px;
+            color: white !important;
+        }
+        
+        .itinerary-header-details span {
+            padding: 10px 20px;
+            color: white !important;
+        }
+        
+        .itinerary-header-meta {
+            gap: 15px;
+        }
+        
+        .itinerary-header-meta-item {
+            padding: 10px 20px;
+            font-size: 0.95rem;
+            color: white !important;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .itinerary-header-title {
+            font-size: 2rem;
+            color: white !important;
+        }
+        
+        .itinerary-header-flag {
+            font-size: 3.5rem;
+            color: white !important;
+        }
+        
+        .itinerary-header-details {
+            flex-direction: column;
+            gap: 10px;
+            color: white !important;
+        }
+        
+        .itinerary-header-meta {
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .itinerary-header-meta-item {
+            color: white !important;
+        }
+    }
+    
+    /* ===============================
+       MODERN BUDGET BREAKDOWN SECTION
+    ================================ */
+    
+    .budget-section {
+        background: #ffffff;
+        border-radius: 24px;
+        padding: 30px;
+        margin: 30px 0;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .budget-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #3b82f6, #10b981);
+        border-radius: 24px 24px 0 0;
+    }
+    
+    .budget-header {
+        text-align: center;
+        margin-bottom: 40px;
+        position: relative;
+    }
+    
+    .budget-icon {
+        font-size: 3.5rem;
+        margin-bottom: 15px;
+        display: inline-block;
+        animation: float 3s ease-in-out infinite;
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        50% { transform: translateY(-10px) rotate(5deg); }
+    }
+    
+    .budget-title {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #1e293b;
+        margin-bottom: 10px;
+        background: linear-gradient(90deg, #1e40af, #059669);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .budget-subtitle {
+        color: #64748b;
+        font-size: 1.1rem;
+        max-width: 500px;
+        margin: 0 auto;
+        line-height: 1.6;
+    }
+    
+    /* Budget details card */
+    .budget-details-card {
+        background: #f8fafc;
+        border-radius: 20px;
+        padding: 25px;
+        border: 1px solid #e2e8f0;
+        height: 100%;
+    }
+    
+    .budget-total-card {
+        background: linear-gradient(135deg, #1e40af, #3b82f6);
+        border-radius: 16px;
+        padding: 25px;
+        text-align: center;
+        margin-bottom: 25px;
+        color: white;
+        box-shadow: 0 8px 25px rgba(59, 130, 246, 0.2);
+    }
+    
+    .total-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        opacity: 0.9;
+        margin-bottom: 8px;
+    }
+    
+    .total-amount {
+        font-size: 2.8rem;
+        font-weight: 800;
+        margin: 10px 0;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    }
+    
+    .total-subtitle {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        font-weight: 500;
+    }
+    
+    .budget-items-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    
+    .budget-item {
+        display: flex;
+        align-items: center;
+        padding: 15px;
+        background: white;
+        border-radius: 12px;
+        margin-bottom: 12px;
+        border: 1px solid #f1f5f9;
+        transition: all 0.3s ease;
+    }
+    
+    .budget-item:hover {
+        transform: translateX(5px);
+        border-color: #3b82f6;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+    }
+    
+    .budget-item-color {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 15px;
+        flex-shrink: 0;
+    }
+    
+    .budget-item-content {
+        flex: 1;
+    }
+    
+    .budget-item-label {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 3px;
+    }
+    
+    .budget-item-value {
+        font-size: 0.9rem;
+        color: #64748b;
+        font-weight: 500;
+    }
+    
+    .budget-item-percentage {
+        background: #f1f5f9;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #1e40af;
+        min-width: 50px;
+        text-align: center;
+    }
+    
+    /* Budget info card */
+    .budget-info-card {
+        background: linear-gradient(135deg, #f0f9ff, #f8fafc);
+        border-radius: 16px;
+        padding: 20px;
+        margin-top: 25px;
+        border: 1px solid #dbeafe;
+        display: flex;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .info-icon {
+        font-size: 1.8rem;
+        color: #3b82f6;
+        background: rgba(59, 130, 246, 0.1);
+        padding: 10px;
+        border-radius: 12px;
+        flex-shrink: 0;
+    }
+    
+    .info-content {
+        flex: 1;
+    }
+    
+    .info-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1e40af;
+        margin-bottom: 8px;
+    }
+    
+    .info-text {
+        font-size: 0.9rem;
+        color: #475569;
+        line-height: 1.6;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
-if 'itinerary' not in st.session_state:
-    st.session_state.itinerary = None
-if 'email_text' not in st.session_state:
-    st.session_state.email_text = ""
-if 'image_cache' not in st.session_state:
-    st.session_state.image_cache = {}
-if 'places_cache' not in st.session_state:
-    st.session_state.places_cache = {}
-if 'countries_data' not in st.session_state:
-    st.session_state.countries_data = {}
+# ===============================
+# HELPER FUNCTIONS (Keep all the helper functions from previous code)
+# ===============================
 
 # Function to create hero section
 def create_hero_section():
@@ -2034,8 +1605,9 @@ def create_hero_section():
     </div>
     """, unsafe_allow_html=True)
 
+# [KEEP ALL THE HELPER FUNCTIONS FROM THE PREVIOUS CODE HERE]
 # Function to fetch all countries from REST Countries API
-@st.cache_data(ttl=86400) # Cache for 24 hours
+@st.cache_data(ttl=86400)
 def get_all_countries():
     """Fetch all countries with details from REST Countries API"""
     try:
@@ -2043,7 +1615,7 @@ def get_all_countries():
         if response.status_code == 200:
             countries = response.json()
             country_list = []
-          
+            
             for country in countries:
                 country_data = {
                     "name": country.get("name", {}).get("common", "Unknown"),
@@ -2058,18 +1630,18 @@ def get_all_countries():
                     "flag": country.get("flag", "🏳️"),
                     "timezones": country.get("timezones", []),
                     "borders": country.get("borders", []),
-                    "cca2": country.get("cca2", ""), # Country code
-                    "latlng": country.get("latlng", [0, 0]) # Latitude, Longitude
+                    "cca2": country.get("cca2", ""),
+                    "latlng": country.get("latlng", [0, 0])
                 }
                 country_list.append(country_data)
-          
+            
             # Sort alphabetically
             country_list.sort(key=lambda x: x["name"])
             return country_list
     except Exception as e:
-        st.warning(f"Could not fetch countries: {str(e)}")
+        # Silently fail, we'll use fallback
         return []
-  
+    
     return []
 
 # Function to get real places from OpenTripMap API
@@ -2078,7 +1650,7 @@ def get_places_from_opentripmap(lat, lon, radius=10000, limit=20):
     """Get tourist attractions from OpenTripMap API"""
     if not OPENTRIPMAP_API_KEY:
         return []
-  
+    
     try:
         url = "https://api.opentripmap.com/0.1/en/places/radius"
         params = {
@@ -2088,26 +1660,27 @@ def get_places_from_opentripmap(lat, lon, radius=10000, limit=20):
             "format": "json",
             "limit": limit,
             "apikey": OPENTRIPMAP_API_KEY,
-            "kinds": "historic,architecture,cultural,museums,religion,beaches,natural" # Filter for tourist attractions
+            "kinds": "historic,architecture,cultural,museums,religion,beaches,natural"
         }
-      
+        
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             places = response.json()
             detailed_places = []
-          
+            
             # Get details for each place
-            for place in places[:10]: # Limit to 10 for performance
+            for place in places[:10]:
                 xid = place.get("xid")
                 if xid:
                     details = get_place_details_from_opentripmap(xid)
                     if details:
                         detailed_places.append(details)
-          
+            
             return detailed_places
     except Exception as e:
-        st.warning(f"OpenTripMap API error: {str(e)}")
-  
+        # Silently fail
+        return []
+    
     return []
 
 def get_place_details_from_opentripmap(xid):
@@ -2115,12 +1688,11 @@ def get_place_details_from_opentripmap(xid):
     try:
         url = f"https://api.opentripmap.com/0.1/en/places/xid/{xid}"
         params = {"apikey": OPENTRIPMAP_API_KEY}
-      
+        
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             place = response.json()
-          
-            # Extract place type from kinds
+            
             kinds = place.get("kinds", "").split(",")
             place_type = "Attraction"
             if "historic" in kinds:
@@ -2135,7 +1707,7 @@ def get_place_details_from_opentripmap(xid):
                 place_type = "Natural"
             elif "architecture" in kinds:
                 place_type = "Architecture"
-          
+            
             return {
                 "name": place.get("name", "Unknown Place"),
                 "type": place_type,
@@ -2149,7 +1721,7 @@ def get_place_details_from_opentripmap(xid):
             }
     except:
         pass
-  
+    
     return None
 
 # Function to get places from Foursquare API
@@ -2158,27 +1730,27 @@ def get_places_from_foursquare(city, country, category="tourism"):
     """Get places from Foursquare API"""
     if not FOURSQUARE_API_KEY:
         return []
-  
+    
     try:
         url = "https://api.foursquare.com/v3/places/search"
         headers = {
             "Authorization": FOURSQUARE_API_KEY,
             "accept": "application/json"
         }
-      
+        
         query = f"{city}, {country}"
         params = {
             "query": "tourist attraction",
             "near": query,
             "limit": 15,
-            "categories": "16000" # Travel & Transportation category
+            "categories": "16000"
         }
-      
+        
         response = requests.get(url, headers=headers, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
             places = []
-          
+            
             for venue in data.get("results", []):
                 place = {
                     "name": venue.get("name", "Unknown"),
@@ -2191,11 +1763,12 @@ def get_places_from_foursquare(city, country, category="tourism"):
                     }
                 }
                 places.append(place)
-          
+            
             return places
     except Exception as e:
-        st.warning(f"Foursquare API error: {str(e)}")
-  
+        # Silently fail
+        return []
+    
     return []
 
 # Function to get city coordinates
@@ -2209,7 +1782,7 @@ def get_city_coordinates(city, country):
             return location.latitude, location.longitude
     except:
         pass
-  
+    
     # Fallback coordinates for Sri Lankan cities
     fallback_coords = {
         "Colombo": (6.9271, 79.8612),
@@ -2255,29 +1828,29 @@ def get_city_coordinates(city, country):
         "Matale": (7.4675, 80.6234),
         "Nuwara Eliya": (6.9708, 80.7829)
     }
-  
+    
     if city in fallback_coords:
         return fallback_coords[city]
-  
+    
     # Return default coordinates
-    return (7.8731, 80.7718) # Center of Sri Lanka
+    return (7.8731, 80.7718)
 
 # Function to get real images with multiple sources
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_place_image(place_name, city, country, size="medium"):
     """Get high-quality image for a real place from multiple sources"""
     cache_key = f"{place_name}_{city}_{country}_{size}"
-  
+    
     # Check cache first
     if cache_key in st.session_state.image_cache:
         return st.session_state.image_cache[cache_key]
-  
+    
     # Try Unsplash first
     if UNSPLASH_ACCESS_KEY:
         try:
             url = "https://api.unsplash.com/search/photos"
             headers = {"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"}
-          
+            
             queries = [
                 f"{place_name} {city} {country} tourism",
                 f"{place_name} landmark",
@@ -2285,7 +1858,7 @@ def get_place_image(place_name, city, country, size="medium"):
                 f"{place_name} travel",
                 place_name
             ]
-          
+            
             for query in queries:
                 params = {
                     "query": query,
@@ -2293,14 +1866,14 @@ def get_place_image(place_name, city, country, size="medium"):
                     "orientation": "landscape",
                     "content_filter": "high"
                 }
-              
+                
                 response = requests.get(url, headers=headers, params=params, timeout=10)
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("results") and len(data["results"]) > 0:
                         photo = data["results"][0]
                         image_url = photo["urls"]["regular"] if size == "medium" else photo["urls"]["full"]
-                      
+                        
                         result = {
                             "url": image_url,
                             "photographer": photo["user"]["name"],
@@ -2312,34 +1885,34 @@ def get_place_image(place_name, city, country, size="medium"):
                         return result
         except:
             pass
-  
+    
     # Try Pexels
     if PEXELS_API_KEY:
         try:
             headers = {"Authorization": PEXELS_API_KEY}
             url = "https://api.pexels.com/v1/search"
-          
+            
             queries = [
                 f"{place_name} {city} tourism",
                 f"{place_name} landmark {country}",
                 f"{city} attractions",
                 place_name
             ]
-          
+            
             for query in queries:
                 params = {
                     "query": query,
                     "per_page": 1,
                     "orientation": "landscape"
                 }
-              
+                
                 response = requests.get(url, headers=headers, params=params, timeout=10)
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("photos") and len(data["photos"]) > 0:
                         photo = data["photos"][0]
                         image_url = photo["src"]["large"] if size == "large" else photo["src"]["medium"]
-                      
+                        
                         result = {
                             "url": image_url,
                             "photographer": photo["photographer"],
@@ -2351,8 +1924,8 @@ def get_place_image(place_name, city, country, size="medium"):
                         return result
         except:
             pass
-  
-    # Fallback: Use Wikimedia Commons for famous places
+    
+    # Fallback: Use Wikimedia Commons
     try:
         search_query = f"{place_name} {city}"
         wiki_url = "https://en.wikipedia.org/w/api.php"
@@ -2363,7 +1936,7 @@ def get_place_image(place_name, city, country, size="medium"):
             "piprop": "original",
             "titles": search_query
         }
-      
+        
         response = requests.get(wiki_url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
@@ -2381,31 +1954,39 @@ def get_place_image(place_name, city, country, size="medium"):
                     return result
     except:
         pass
-  
-    # Return None if no image found
-    return None
+    
+    # Return a default image if all sources fail
+    default_images = [
+        "https://images.unsplash.com/photo-1518791841217-8f162f1e1131",
+        "https://images.pexels.com/photos/356807/pexels-photo-356807.jpeg"
+    ]
+    return {
+        "url": random.choice(default_images),
+        "photographer": "Default Image",
+        "source": "Default"
+    }
 
 # Function to get real places for a city
 def get_real_places(city, country, limit=10):
     """Get real tourist places for a city from multiple APIs"""
     cache_key = f"{city}_{country}"
-  
+    
     if cache_key in st.session_state.places_cache:
         return st.session_state.places_cache[cache_key]
-  
+    
     places = []
-  
+    
     # Get city coordinates
     lat, lon = get_city_coordinates(city, country)
-  
+    
     # Try OpenTripMap API first
     opentripmap_places = get_places_from_opentripmap(lat, lon, limit=limit)
     places.extend(opentripmap_places)
-  
+    
     # Try Foursquare API
     foursquare_places = get_places_from_foursquare(city, country)
     places.extend(foursquare_places)
-  
+    
     # If no places found from APIs, use fallback database
     if not places:
         fallback_places = {
@@ -2901,11 +2482,12 @@ def get_real_places(city, country, limit=10):
                 {"name": "Water Sports", "type": "Adventure Sports", "rating": 4.2, "description": "Various water activities including kayaking and paddle boarding."},
                 {"name": "Sunset Views", "type": "Viewpoint", "rating": 4.5, "description": "Beautiful sunsets over Indian Ocean from Weligama beach."}
             ]
+            
         }
-      
+        
         if city in fallback_places:
             places = fallback_places[city]
-  
+    
     # Cache the results
     st.session_state.places_cache[cache_key] = places
     return places
@@ -2970,27 +2552,27 @@ def extract_city_from_title(title):
 def get_daily_places(day_number, city, country, num_places=3):
     """Get real places for a specific day"""
     all_places = get_real_places(city, country, limit=20)
-  
+    
     if not all_places:
         return []
-  
+    
     # Select different places for each day
     start_idx = (day_number - 1) * num_places
     selected_places = []
-  
+    
     for i in range(num_places):
         idx = (start_idx + i) % len(all_places)
         place = all_places[idx].copy()
-      
+        
         # Add additional information
         best_times = [
             "Morning 9AM-12PM (Best for photos)",
             "Afternoon 2PM-5PM (Avoid crowds)",
             "Evening 6PM-9PM (Beautiful sunset views)"
         ]
-      
+        
         durations = ["2-3 hours", "3-4 hours", "1-2 hours"]
-      
+        
         # Map place types to icons
         icon_map = {
             "Buddhist Temple": "🛕", "Hindu Temple": "🛕", "Mosque": "🕌", "Church": "⛪",
@@ -3014,27 +2596,27 @@ def get_daily_places(day_number, city, country, num_places=3):
             "Cultural Experience": "🎎", "Educational": "📚", "Photography": "📷",
             "Pilgrimage Site": "🙏", "Religious Tour": "🛐", "Rural Tourism": "🌾"
         }
-      
+        
         place.update({
             "best_time": best_times[i % len(best_times)],
             "duration": durations[i % len(durations)],
             "icon": icon_map.get(place['type'], "📍"),
             "tags": [place['type'], "Popular", "Must Visit"]
         })
-      
+        
         selected_places.append(place)
-  
+    
     return selected_places
 
 # Function to generate comprehensive itinerary using AI
 def generate_comprehensive_itinerary(email_content):
     """Generate comprehensive travel itinerary using AI"""
-  
+    
     # Extract destination from email
     destination_prompt = f"""
     Extract the following information from this travel inquiry:
     {email_content}
-  
+    
     Return as JSON:
     {{
         "destination_country": "string",
@@ -3046,7 +2628,7 @@ def generate_comprehensive_itinerary(email_content):
         "travel_dates": "string"
     }}
     """
-  
+    
     try:
         # First, extract destination info
         extraction_response = client.chat.completions.create(
@@ -3059,9 +2641,9 @@ def generate_comprehensive_itinerary(email_content):
             max_tokens=500,
             response_format={"type": "json_object"}
         )
-      
+        
         extracted_info = json.loads(extraction_response.choices[0].message.content)
-      
+        
         country = extracted_info.get("destination_country", "")
         destinations = extracted_info.get("destinations", [])
         if not destinations:
@@ -3069,27 +2651,27 @@ def generate_comprehensive_itinerary(email_content):
             if main_city:
                 destinations = [main_city]
         days = extracted_info.get("duration_days", 5)
-      
+        
         # Get real places for each destination
         places_by_city = {}
         for dest_city in destinations:
             places_by_city[dest_city] = get_real_places(dest_city, country, limit=10)
-      
+        
         # Create itinerary prompt with real places
         system_prompt = f"""You are an expert travel planner with deep knowledge of global destinations.
-      
+        
         Create a detailed, realistic multi-city travel itinerary for the route {', '.join(destinations)} in {country}.
-      
+        
         Available real places by city:
         {json.dumps(places_by_city, indent=2)}
-      
+        
         Travel details:
         - Duration: {days} days
         - Travelers: {extracted_info.get('travelers', 2)}
         - Budget: {extracted_info.get('budget', 'Medium')}
         - Interests: {extracted_info.get('interests', ['General'])}
         - Dates: {extracted_info.get('travel_dates', 'Not specified')}
-      
+        
         IMPORTANT: Use the real places listed above, selecting from the appropriate city's list for each day. Include specific details like:
         - Opening hours
         - Ticket prices
@@ -3097,7 +2679,7 @@ def generate_comprehensive_itinerary(email_content):
         - Transportation tips
         - Local food recommendations
         - Cultural insights
-      
+        
         Return ONLY valid JSON with this structure:
         {{
             "trip_summary": {{
@@ -3200,9 +2782,9 @@ def generate_comprehensive_itinerary(email_content):
                 "string"
             ]
         }}
-      
+        
         Make it practical, detailed, and based on actual tourism information."""
-      
+        
         response = client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -3213,22 +2795,22 @@ def generate_comprehensive_itinerary(email_content):
             max_tokens=8000,
             response_format={"type": "json_object"}
         )
-      
+        
         result = response.choices[0].message.content.strip()
-      
+        
         # Clean JSON
         if result.startswith("```json"):
             result = result[7:-3]
         elif result.startswith("```"):
             result = result[3:-3]
-      
+        
         itinerary_data = json.loads(result)
-      
+        
         # Add real places data to itinerary
         itinerary_data["places_by_city"] = places_by_city
-      
+        
         return itinerary_data
-      
+        
     except Exception as e:
         st.error(f"Error generating itinerary: {str(e)}")
         return None
@@ -3239,10 +2821,10 @@ def create_places_map(places, city, country):
     try:
         # Get city coordinates
         lat, lon = get_city_coordinates(city, country)
-      
+        
         # Create map
         m = folium.Map(location=[lat, lon], zoom_start=12, tiles="CartoDB positron")
-      
+        
         # Add markers for each place
         for place in places:
             if "coordinates" in place and place["coordinates"]["lat"] and place["coordinates"]["lon"]:
@@ -3255,29 +2837,33 @@ def create_places_map(places, city, country):
                     </p>
                 </div>
                 """
-              
+                
                 folium.Marker(
                     location=[place["coordinates"]["lat"], place["coordinates"]["lon"]],
                     popup=folium.Popup(popup_html, max_width=250),
                     tooltip=place["name"],
                     icon=folium.Icon(color="blue", icon="info-sign")
                 ).add_to(m)
-      
+        
         return m
     except:
         return None
 
+# ===============================
+# MAIN APPLICATION
+# ===============================
+
 # Create Hero Section
 create_hero_section()
 
-# Sidebar with enhanced features
+# Sidebar with white background
 with st.sidebar:
     st.markdown("### 🎯 Sri Lanka Explorer")
-  
+    
     # Set default country to Sri Lanka
     countries_data = get_all_countries()
     sri_lanka_data = next((c for c in countries_data if c["name"] == "Sri Lanka"), None)
-  
+    
     if sri_lanka_data:
         col_flag, col_info = st.columns([1, 3])
         with col_flag:
@@ -3293,10 +2879,10 @@ with st.sidebar:
                 </span>
             </div>
             """, unsafe_allow_html=True)
-  
+    
     # Sri Lanka regions
     st.markdown("### 🗺️ Regions of Sri Lanka")
-  
+    
     regions = {
         "🏙️ Western Province": ["Colombo", "Negombo", "Kalutara"],
         "🏞️ Central Province": ["Kandy", "Nuwara Eliya", "Matale"],
@@ -3309,18 +2895,18 @@ with st.sidebar:
         "🌅 East Coast": ["Trincomalee", "Batticaloa"],
         "🌴 North": ["Jaffna", "Mannar", "Vavuniya"]
     }
-  
+    
     selected_region = st.selectbox("Choose Region", list(regions.keys()))
-  
+    
     if selected_region:
         cities_in_region = regions[selected_region]
         selected_city = st.selectbox("Choose City", cities_in_region)
-      
+        
         if st.button("🔍 Explore City", use_container_width=True):
             # Get places for this city
             with st.spinner(f"Finding places in {selected_city}..."):
                 places = get_real_places(selected_city, "Sri Lanka", limit=10)
-              
+                
                 if places:
                     st.success(f"Found {len(places)} places in {selected_city}!")
                     for place in places[:3]:
@@ -3330,96 +2916,12 @@ with st.sidebar:
                             <div style="color: #475569; font-size: 0.85rem;">{place['type']} • ⭐ {place.get('rating', 'N/A')}</div>
                         </div>
                         """, unsafe_allow_html=True)
-  
+    
     st.markdown("---")
-  
-    # Quick templates
-    st.markdown("### 📋 Sri Lanka Itinerary Templates")
-  
-    template_options = {
-        "🇱🇰 Sri Lanka Classic 12-Day": """Planning a 12-day comprehensive tour of Sri Lanka.
-Travel Dates: December 15-26, 2024
-Travelers: 2 adults
-Budget: $3500
-Interests: Culture, history, beaches, wildlife, tea plantations
-Destinations: Colombo, Sigiriya, Kandy, Nuwara Eliya, Ella, Yala, Galle, Bentota
-Specific Requests:
-- Visit UNESCO World Heritage sites
-- Experience tea plantations and factory tour
-- Go on wildlife safari in Yala National Park
-- Try authentic Sri Lankan cuisine
-- Take scenic train from Kandy to Ella
-- Include beach time in Bentota and Galle
-- Visit Temple of the Sacred Tooth Relic
-Accommodation: Mix of 4-star hotels and boutique properties
-Transport: Private car with driver for entire trip
-Please create balanced itinerary with cultural, natural, and relaxation components.""",
-      
-        "🏖️ South Coast Beach Holiday 10-Day": """Planning a 10-day beach holiday in Southern Sri Lanka.
-Travel Dates: January 10-19, 2025
-Travelers: Family of 4 (2 adults, 2 children ages 8 and 12)
-Budget: $4000
-Interests: Beaches, water sports, family activities, relaxation
-Destinations: Colombo, Bentota, Hikkaduwa, Mirissa, Galle, Weligama
-Specific Requests:
-- Family-friendly beach resorts with pools
-- Water sports activities (snorkeling, jet skiing)
-- Visit Galle Fort and turtle hatchery
-- Whale watching in Mirissa
-- Safe swimming beaches for children
-- Cultural activities suitable for kids
-- Evening entertainment options
-Accommodation: Beachfront resorts with family rooms
-Transport: Private minivan with driver
-Want relaxed pace with beach time and family-friendly activities.""",
-      
-        "🌄 Hill Country Adventure 8-Day": """Planning an 8-day hill country adventure.
-Travel Dates: March 15-22, 2025
-Travelers: Young couple (active travelers)
-Budget: $2500
-Interests: Hiking, tea plantations, waterfalls, scenic views, photography
-Destinations: Kandy, Nuwara Eliya, Ella, Hatton, Bandarawela
-Specific Requests:
-- Hiking to Little Adam's Peak and Ella Rock
-- Visit Horton Plains and World's End
-- Tea plantation tours and tasting
-- Scenic train journeys
-- Waterfall visits (Ravana Falls, St. Clair's Falls)
-- Photography opportunities
-- Local village experiences
-Accommodation: Boutique hotels and guesthouses
-Transport: Combination of train and private car
-Prefer active itinerary with moderate hiking.""",
-      
-        "🐘 Wildlife & Nature 7-Day": """Planning a 7-day wildlife focused trip.
-Travel Dates: February 2025
-Travelers: 2 wildlife enthusiasts
-Budget: $3000
-Interests: Wildlife safaris, birdwatching, national parks, conservation
-Destinations: Colombo, Yala, Udawalawe, Kitulgala, Sinharaja
-Specific Requests:
-- Multiple wildlife safaris (morning and evening)
-- Birdwatching tours
-- Visit elephant orphanage and transit home
-- White water rafting in Kitulgala
-- Guided nature walks
-- Photography focused itinerary
-- Conservation project visits
-Accommodation: Wildlife lodges and eco-hotels
-Transport: 4x4 safari jeeps and private car
-Want maximum wildlife viewing opportunities."""
-    }
-  
-    selected_template = st.selectbox("Choose Template", list(template_options.keys()))
-  
-    if st.button("📝 Use Template", use_container_width=True):
-        st.session_state.email_text = template_options[selected_template]
-  
-    st.markdown("---")
-  
+    
     # Stats
     st.markdown("### 📊 Sri Lanka Stats")
-  
+    
     col_stat1, col_stat2 = st.columns(2)
     with col_stat1:
         st.markdown(f"""
@@ -3429,7 +2931,7 @@ Want maximum wildlife viewing opportunities."""
             <div class="stat-label">Cities</div>
         </div>
         """, unsafe_allow_html=True)
-  
+    
     with col_stat2:
         st.markdown(f"""
         <div class="stat-card">
@@ -3438,16 +2940,15 @@ Want maximum wildlife viewing opportunities."""
             <div class="stat-label">Attractions</div>
         </div>
         """, unsafe_allow_html=True)
-  
+    
     st.markdown("---")
-  
+    
     # Settings
     st.markdown("### ⚙️ Settings")
-  
+    
     show_images = st.checkbox("Show Images", value=True)
     show_map = st.checkbox("Show Interactive Map", value=True)
-    image_quality = st.select_slider("Image Quality", ["Low", "Medium", "High"], value="Medium")
-  
+    
     if st.button("🔄 Clear Cache", use_container_width=True):
         st.session_state.image_cache = {}
         st.session_state.places_cache = {}
@@ -3465,31 +2966,23 @@ with col1:
                 <h3 class="inquiry-card-title">Travel Inquiry</h3>
                 <p class="inquiry-card-subtitle">Share your travel dreams, we'll create the perfect itinerary</p>
             </div>
-            <div class="card-status">
-                <div class="status-dot"></div>
-            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    
-    
-    
-    
-    
-    
-    # Create a container with custom class
-    st.markdown('<div class="text-area-wrapper">', unsafe_allow_html=True)
-    
     email_text = st.text_area(
-        "Describe your travel plans:",  # Keep label visible
+        "Describe your travel plans:",
         value=st.session_state.email_text,
         height=280,
-        placeholder="""🇱🇰 Tell us about your Sri Lanka trip!...""",  # Shortened for brevity
+        placeholder="""🇱🇰 Tell us about your Sri Lanka trip! Include details like:
+• Travel dates & duration
+• Number of travelers
+• Budget range  
+• Cities you want to visit
+• Your interests (culture, beaches, wildlife, adventure, etc.)
+• Any special requests or preferences""",
         key="travel_inquiry_textarea"
     )
-    
-    st.markdown('</div>', unsafe_allow_html=True)
     
     # Footer stays outside
     st.markdown("""
@@ -3501,9 +2994,10 @@ with col1:
         </div>
     </div>
     """, unsafe_allow_html=True)
+    
 with col2:
     st.markdown("### ✨ Sri Lanka Features")
-  
+    
     features = [
         ("🏛️", "8 UNESCO Sites", "Cultural Triangle & Forts"),
         ("🏖️", "1340km Coastline", "Beautiful beaches"),
@@ -3516,7 +3010,7 @@ with col2:
         ("🌿", "Ayurveda", "Wellness & Spa"),
         ("📷", "Photography", "Stunning landscapes")
     ]
-  
+    
     for icon, title, desc in features[:5]:
         st.markdown(f"""
         <div style="background: #f8fafc; border-radius: 12px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #3b82f6; border: 1px solid #e2e8f0;">
@@ -3548,7 +3042,7 @@ with col_btn2:
         ]
         random_city = random.choice(sri_lanka_cities)
         days = random.randint(7, 14)
-      
+        
         st.session_state.email_text = f"""Planning a {days}-day trip to explore the beauty of Sri Lanka, focusing on {random_city} and surrounding areas.
 Travel Dates: Flexible dates next year
 Travelers: {random.randint(1, 4)} {'person' if random.randint(1, 4) == 1 else 'people'}
@@ -3564,19 +3058,30 @@ with col_btn3:
 
 # Generate and display itinerary
 if generate_clicked and email_text.strip():
-    with st.spinner("🇱🇰 Creating your comprehensive Sri Lanka itinerary with real destinations..."):
-        itinerary_data = generate_comprehensive_itinerary(email_text)
-      
-        if itinerary_data:
-            st.session_state.itinerary = itinerary_data
-            st.success("✨ Itinerary generated successfully!")
-            time.sleep(1)
-            st.rerun()
+    # Validate input first
+    is_valid, message = validate_email_content(email_text)
+    
+    if not is_valid:
+        st.warning(message)
+    else:
+        progress_bar = st.progress(0)
+        with st.spinner("🇱🇰 Creating your comprehensive Sri Lanka itinerary..."):
+            progress_bar.progress(20)
+            itinerary_data = generate_comprehensive_itinerary(email_text)
+            progress_bar.progress(80)
+            
+            if itinerary_data:
+                st.session_state.itinerary = itinerary_data
+                progress_bar.progress(100)
+                st.success("✨ Itinerary generated successfully!")
+                time.sleep(1)
+                st.rerun()
+
 # Display itinerary if available
 if st.session_state.itinerary:
     itinerary_data = st.session_state.itinerary
     summary = itinerary_data.get("trip_summary", {})
-  
+    
     country = summary.get("destination_country", "Sri Lanka")
     destinations = summary.get("destinations", [])
     city = destinations[0] if destinations else ""
@@ -3584,63 +3089,42 @@ if st.session_state.itinerary:
     travelers = summary.get("travelers", 2)
     budget = summary.get("budget", "")
     theme = summary.get("trip_theme", "")
-  
-    # Get Sri Lanka flag
-    countries_data = get_all_countries()
-    sri_lanka_data = next((c for c in countries_data if c["name"] == "Sri Lanka"), {})
-    flag = sri_lanka_data.get("flag", "🇱🇰") if sri_lanka_data else "🇱🇰"
-  
-    # Trip Summary Header
+    
+    # Trip Summary Header with Background Image (without flag)
     st.markdown("---")
     st.markdown(f"""
-    <div style="text-align: center; margin-bottom: 40px; padding: 30px; background: #f8fafc; border-radius: 25px; border: 1px solid #e2e8f0;">
-        <div style="font-size: 4rem; margin-bottom: 10px;">{flag}</div>
-        <h1 class="gradient-text" style="font-size: 2.8rem; margin-bottom: 15px;">
-            {summary.get('trip_title', 'Your Sri Lanka Travel Itinerary')}
-        </h1>
-        <p style="color: #475569; font-size: 1.3rem; margin-bottom: 5px;">
-            📍 {', '.join(destinations)} • ⏱️ {days} Days • 👥 {travelers} Travelers
-        </p>
-        <p style="color: #10b981; font-size: 1.1rem; font-weight: 600;">
-            {theme} • 💰 Budget: {budget} • ⭐ {summary.get('best_time_to_visit', 'Best Season')}
-        </p>
+    <div class="itinerary-header-container">
+        <div class="itinerary-header-content">
+            <h1 class="itinerary-header-title">
+                {summary.get('trip_title', 'Your Sri Lanka Travel Itinerary')}
+            </h1>
+            <div class="itinerary-header-details">
+                <span>📍 {', '.join(destinations)}</span>
+                <span>⏱️ {days} Days</span>
+                <span>👥 {travelers} Travelers</span>
+            </div>
+            <div class="itinerary-header-meta">
+                <span class="itinerary-header-meta-item">{theme}</span>
+                <span class="itinerary-header-meta-item">💰 {budget}</span>
+                <span class="itinerary-header-meta-item">⭐ {summary.get('best_time_to_visit', 'Best Season')}</span>
+            </div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
-  
-    # Enhanced Stats Cards
-    col_stats = st.columns(5)
-  
-    stats_data = [
-        ("📍", "Destinations", ', '.join(destinations[:2]) + ('...' if len(destinations)>2 else '')),
-        ("⏱️", "Duration", f"{days} Days"),
-        ("👥", "Travelers", str(travelers)),
-        ("💰", "Budget", budget),
-        ("⭐", "Theme", theme[:15] + ('...' if len(theme) > 15 else ''))
-    ]
-  
-    # Display stats cards
-    for idx, (icon, label, value) in enumerate(stats_data):
-        with col_stats[idx]:
-            st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-icon">{icon}</div>
-                <div class="stat-number animated">{value}</div>
-                <div class="stat-label">{label}</div>
-            </div>
-            """, unsafe_allow_html=True)
-  
+    
+    
     # Additional Info Cards
     if any([summary.get('currency'), summary.get('language'), summary.get('time_zone')]):
         st.markdown("### ℹ️ Destination Information")
-      
+        
         info_cols = st.columns(3)
-      
+        
         info_items = [
             ("💱", "Currency", summary.get('currency', 'Sri Lankan Rupee (LKR)')),
             ("🗣️", "Language", summary.get('language', 'Sinhala, Tamil, English')),
             ("🕐", "Time Zone", summary.get('time_zone', 'GMT+5:30'))
         ]
-      
+        
         for idx, (icon, label, value) in enumerate(info_items):
             with info_cols[idx]:
                 st.markdown(f"""
@@ -3650,44 +3134,44 @@ if st.session_state.itinerary:
                     <div style="color: #475569; font-size: 0.9rem;">{value}</div>
                 </div>
                 """, unsafe_allow_html=True)
-  
+    
     # Interactive Map (for main city)
     if show_map:
         real_places = itinerary_data.get("places_by_city", {}).get(city, [])
         if real_places:
             st.markdown('<div class="section-title">🗺️ Interactive Map</div>', unsafe_allow_html=True)
-          
+            
             map_obj = create_places_map(real_places, city, country)
             if map_obj:
                 with st.container():
                     folium_static(map_obj, width=1200, height=500)
-  
+    
     # Key Attractions
     key_attractions = itinerary_data.get("key_attractions", [])
     if key_attractions:
         st.markdown('<div class="section-title">🌟 Must-Visit Attractions</div>', unsafe_allow_html=True)
-      
+        
         # Top view: Horizontal layout using columns for side-by-side cards
-        num_cols = min(3, len(key_attractions)) # Up to 3 columns for top view
+        num_cols = min(3, len(key_attractions))
         attraction_cols = st.columns(num_cols)
-      
+        
         for idx, attraction in enumerate(key_attractions):
             with attraction_cols[idx % num_cols]:
                 # Fetch real image for the attraction using its city
                 att_city = attraction.get("city", city)
                 image_data = get_place_image(attraction["name"], att_city, country, size="medium") if show_images else None
-              
+                
                 # Place Card without raw HTML to avoid rendering issues
                 st.markdown(f"### {attraction['name']}")
                 st.markdown(f"**Type:** {attraction.get('type', 'Attraction')}")
                 st.markdown(f"**Best Time:** {attraction.get('best_time_to_visit', 'N/A')}")
                 st.markdown(f"**Duration:** {attraction.get('duration_needed', 'N/A')}")
-              
+                
                 if image_data:
                     st.image(image_data["url"], caption=f"📸 {image_data['photographer']}", use_container_width=True)
-              
+                
                 st.markdown(f"**Description:** {attraction.get('description', '')}")
-              
+                
                 # Info grid using columns to simulate the grid without HTML
                 info_col1, info_col2 = st.columns(2)
                 with info_col1:
@@ -3696,24 +3180,24 @@ if st.session_state.itinerary:
                 with info_col2:
                     st.markdown(f"**🚗 Transportation:** {attraction.get('transportation', 'N/A')}")
                     st.markdown(f"**💡 Tips:** {attraction.get('tips', 'N/A')}")
-              
-                st.markdown("---") # Separator for each attraction
-  
+                
+                st.markdown("---")
+    
     # Daily Itinerary Section
     st.markdown('<div class="section-title">📅 Daily Itinerary</div>', unsafe_allow_html=True)
-  
+    
     daily_itinerary = itinerary_data.get("daily_itinerary", [])
-  
+    
     for day in daily_itinerary:
         day_num = day.get("day", 1)
         day_title = day.get("title", "Exploring")
         day_overview = day.get("overview", "")
-      
+        
         # Extract city for this day
         current_city = extract_city_from_title(day_title)
         if not current_city:
-            current_city = city # fallback to main city
-      
+            current_city = city
+        
         # Day Header
         st.markdown(f"""
         <div class="day-header">
@@ -3721,110 +3205,113 @@ if st.session_state.itinerary:
             {f'<p style="color: rgba(255, 255, 255, 0.8); margin: 10px 0 0 0; font-size: 1rem;">{day_overview}</p>' if day_overview else ''}
         </div>
         """, unsafe_allow_html=True)
-      
+        
         # Get REAL places for this day using current city
         daily_places = get_daily_places(day_num, current_city, country, num_places=3)
-      
+        
         # Display Places
         if daily_places:
             st.markdown("### 🏆 Top Attractions for Today")
-          
+            
             place_cols = st.columns(min(3, len(daily_places)))
-          
+            
             for idx, place in enumerate(daily_places):
                 with place_cols[idx]:
-                    with st.container():
-                        # Get image
-                        image_data = None
-                        if show_images:
-                            with st.spinner(""):
-                                image_data = get_place_image(place["name"], current_city, country, size="medium")
-                      
-                        # Card content
-                        col_badge, col_rating = st.columns([2, 1])
-                        with col_badge:
-                            st.markdown(f"""<div class="place-badge">{place['type']}</div>""", unsafe_allow_html=True)
-                      
-                        with col_rating:
-                            stars = "⭐" * int(place.get("rating", 4))
-                            if place.get("rating", 4) - int(place.get("rating", 4)) >= 0.5:
-                                stars += "½"
-                          
+                    try:
+                        with st.container():
+                            # Get image
+                            image_data = None
+                            if show_images:
+                                with st.spinner(""):
+                                    image_data = get_place_image(place["name"], current_city, country, size="medium")
+                            
+                            # Card content
+                            col_badge, col_rating = st.columns([2, 1])
+                            with col_badge:
+                                st.markdown(f"""<div class="place-badge">{place['type']}</div>""", unsafe_allow_html=True)
+                            
+                            with col_rating:
+                                stars = "⭐" * int(place.get("rating", 4))
+                                if place.get("rating", 4) - int(place.get("rating", 4)) >= 0.5:
+                                    stars += "½"
+                                
+                                st.markdown(f"""
+                                <div style="display: flex; align-items: center; gap: 5px;">
+                                    <span style="color: #f59e0b; font-size: 0.9rem;">{stars}</span>
+                                    <span style="color: #f59e0b; font-weight: bold; font-size: 0.9rem;">
+                                        {place.get('rating', 4)}/5
+                                    </span>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            # Place name
                             st.markdown(f"""
-                            <div style="display: flex; align-items: center; gap: 5px;">
-                                <span style="color: #f59e0b; font-size: 0.9rem;">{stars}</span>
-                                <span style="color: #f59e0b; font-weight: bold; font-size: 0.9rem;">
-                                    {place.get('rating', 4)}/5
-                                </span>
+                            <div style="color: #1e293b; font-size: 1.2rem; font-weight: 700; margin: 10px 0;">
+                                {place['icon']} {place['name']}
                             </div>
                             """, unsafe_allow_html=True)
-                      
-                        # Place name
-                        st.markdown(f"""
-                        <div style="color: #1e293b; font-size: 1.2rem; font-weight: 700; margin: 10px 0;">
-                            {place['icon']} {place['name']}
-                        </div>
-                        """, unsafe_allow_html=True)
-                      
-                        # Image
-                        if image_data and show_images:
-                            try:
-                                st.image(
-                                    image_data["url"],
-                                    caption=f"📸 {image_data['photographer']}",
-                                    use_container_width=True
-                                )
-                            except:
-                                pass
-                      
-                        # Description
-                        st.markdown(f"""
-                        <div style="color: #475569; font-size: 0.9rem; line-height: 1.6; margin: 10px 0;">
-                            {place['description']}
-                        </div>
-                        """, unsafe_allow_html=True)
-                      
-                        # Tags
-                        if "tags" in place:
-                            tag_cols = st.columns(3)
-                            for tag_idx, tag in enumerate(place["tags"][:3]):
-                                with tag_cols[tag_idx]:
-                                    st.markdown(f"""<div class="place-tag">{tag}</div>""", unsafe_allow_html=True)
-                      
-                        # Time info
-                        col_time1, col_time2 = st.columns(2)
-                        with col_time1:
+                            
+                            # Image
+                            if image_data and show_images:
+                                try:
+                                    st.image(
+                                        image_data["url"],
+                                        caption=f"📸 {image_data['photographer']}",
+                                        use_container_width=True
+                                    )
+                                except:
+                                    pass
+                            
+                            # Description
                             st.markdown(f"""
-                            <div class="time-item">
-                                <span style="color: #60a5fa;">⏰</span>
-                                <span>{place['best_time']}</span>
+                            <div style="color: #475569; font-size: 0.9rem; line-height: 1.6; margin: 10px 0;">
+                                {place['description']}
                             </div>
                             """, unsafe_allow_html=True)
-                      
-                        with col_time2:
-                            st.markdown(f"""
-                            <div class="time-item">
-                                <span style="color: #10b981;">🕐</span>
-                                <span>{place['duration']}</span>
-                            </div>
-                            """, unsafe_allow_html=True)
-      
+                            
+                            # Tags
+                            if "tags" in place:
+                                tag_cols = st.columns(3)
+                                for tag_idx, tag in enumerate(place["tags"][:3]):
+                                    with tag_cols[tag_idx]:
+                                        st.markdown(f"""<div class="place-tag">{tag}</div>""", unsafe_allow_html=True)
+                            
+                            # Time info
+                            col_time1, col_time2 = st.columns(2)
+                            with col_time1:
+                                st.markdown(f"""
+                                <div class="time-item">
+                                    <span style="color: #60a5fa;">⏰</span>
+                                    <span>{place['best_time']}</span>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            with col_time2:
+                                st.markdown(f"""
+                                <div class="time-item">
+                                    <span style="color: #10b981;">🕐</span>
+                                    <span>{place['duration']}</span>
+                                </div>
+                                """, unsafe_allow_html=True)
+                    except Exception as e:
+                        st.error(f"Error displaying place: {str(e)}")
+        
         # Daily Schedule
         st.markdown("### ⏰ Daily Schedule")
-      
+        
         schedule_data = [
             ("🌅 Morning", "morning", day.get("morning", {})),
             ("☀️ Afternoon", "afternoon", day.get("afternoon", {})),
             ("🌙 Evening", "evening", day.get("evening", {}))
         ]
-      
+        
         schedule_cols = st.columns(3)
-      
+        
         for idx, (title, key, schedule) in enumerate(schedule_data):
             with schedule_cols[idx]:
                 if schedule:
                     card_class = f"{key}-card"
-                  
+                    
                     st.markdown(f"""
                     <div class="schedule-card {card_class}">
                         <h4 style="color: {['#f59e0b', '#10b981', '#8b5cf6'][idx]}; margin: 0 0 15px 0; font-size: 1.2rem;">
@@ -3841,21 +3328,21 @@ if st.session_state.itinerary:
                         </p>
                     </div>
                     """, unsafe_allow_html=True)
-                  
+                    
                     # Additional info
                     info_items = [
                         ("💰 Cost", schedule.get('cost')),
                         ("🚗 Transport", schedule.get('transportation')),
                         ("💡 Tips", schedule.get('tips'))
                     ]
-                  
+                    
                     for info_label, info_value in info_items:
                         if info_value:
                             st.info(f"**{info_label}:** {info_value}")
-      
+        
         # Accommodation & Food
         col_acc, col_food = st.columns(2)
-      
+        
         with col_acc:
             if day.get("accommodation_suggestion"):
                 st.markdown(f"""
@@ -3864,7 +3351,7 @@ if st.session_state.itinerary:
                     <p style="color: #475569; margin: 0;">{day['accommodation_suggestion']}</p>
                 </div>
                 """, unsafe_allow_html=True)
-      
+        
         with col_food:
             if day.get("food_recommendations"):
                 st.markdown(f"""
@@ -3875,55 +3362,153 @@ if st.session_state.itinerary:
                     </ul>
                 </div>
                 """, unsafe_allow_html=True)
-      
+        
         st.markdown("---")
-  
-    # Budget Breakdown (Visual)
+    
+    # ===============================
+    # MODERN BUDGET BREAKDOWN SECTION
+    # ===============================
+    
     budget_data = itinerary_data.get("budget_breakdown", {})
     if budget_data and budget_data.get("total_estimate"):
-        st.markdown('<div class="section-title">💰 Budget Breakdown</div>', unsafe_allow_html=True)
-      
-        # Create pie chart
-        budget_items = []
-        budget_values = []
-      
-        for key, value in budget_data.items():
-            if key != "total_estimate" and value:
-                budget_items.append(key.title())
-                budget_values.append(float(value.replace('$', '').replace(',', '')) if '$' in str(value) else 100)
-      
-        if budget_items and budget_values:
-            fig = go.Figure(data=[go.Pie(
-                labels=budget_items,
-                values=budget_values,
-                hole=.3,
-                marker_colors=['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280']
-            )])
-          
-            fig.update_layout(
-                title="Budget Distribution",
-                showlegend=True,
-                height=400,
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='#475569')
-            )
-          
-            st.plotly_chart(fig, use_container_width=True)
-          
+        st.markdown("""
+        <div class="budget-section">
+            <div class="budget-header">
+                <div class="budget-icon">💰</div>
+                <div class="budget-title">Budget Breakdown</div>
+                <div class="budget-subtitle">Visual distribution of your travel expenses</div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Create two columns for layout
+        col1, col2 = st.columns([1.2, 1])
+        
+        with col1:
+            # Modern pie chart
+            budget_items = []
+            budget_values = []
+            colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4']
+            
+            for key, value in budget_data.items():
+                if key != "total_estimate" and value and str(value).lower() != "not specified":
+                    formatted_key = key.replace('_', ' ').title()
+                    budget_items.append(formatted_key)
+                    try:
+                        # Extract numeric value from strings like "$100" or "100 USD"
+                        if isinstance(value, str):
+                            value_str = str(value).replace('$', '').replace(',', '').replace('USD', '').strip()
+                            if value_str.replace('.', '').isdigit():
+                                budget_values.append(float(value_str))
+                            else:
+                                budget_values.append(100)  # Default value
+                        else:
+                            budget_values.append(float(value))
+                    except:
+                        budget_values.append(100)
+            
+            if budget_items and budget_values:
+                fig = go.Figure(data=[go.Pie(
+                    labels=budget_items,
+                    values=budget_values,
+                    hole=.5,
+                    marker_colors=colors[:len(budget_items)],
+                    textinfo='percent+label',
+                    textposition='outside',
+                    textfont=dict(size=12, color='#334155'),
+                    hoverinfo='label+value+percent',
+                    hovertemplate='<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}<extra></extra>',
+                    pull=[0.05] * len(budget_items)
+                )])
+                
+                fig.update_layout(
+                    showlegend=False,
+                    height=420,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(family='Inter', color='#475569'),
+                    margin=dict(t=30, b=30, l=30, r=30),
+                    annotations=[
+                        dict(
+                            text="Budget",
+                            x=0.5, y=0.5,
+                            font_size=20,
+                            showarrow=False,
+                            font_color='#64748b'
+                        )
+                    ]
+                )
+                
+                fig.update_traces(marker=dict(line=dict(color='white', width=2)))
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # Budget details panel
+            total_budget = budget_data.get('total_estimate', 'N/A')
             st.markdown(f"""
-            <div style="text-align: center; margin-top: 20px;">
-                <h3 style="color: #10b981;">Total Estimated Budget: {budget_data.get('total_estimate', 'N/A')}</h3>
+            <div class="budget-details-card">
+                <div class="budget-total-card">
+                    <div class="total-label">Total Budget</div>
+                    <div class="total-amount">{total_budget}</div>
+                    <div class="total-subtitle">Estimated for {days} days trip</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # Budget breakdown list
+            st.markdown('<div class="budget-items-title">Expense Breakdown</div>', unsafe_allow_html=True)
+            
+            for i, (key, value) in enumerate(budget_data.items()):
+                if key != "total_estimate" and value and str(value).lower() != "not specified":
+                    formatted_key = key.replace('_', ' ').title()
+                    color_idx = min(i, len(colors)-1)
+                    
+                    # Calculate percentage
+                    try:
+                        if budget_values:
+                            percentage = int((budget_values[i]/sum(budget_values))*100)
+                        else:
+                            percentage = 0
+                    except:
+                        percentage = 0
+                    
+                    st.markdown(f"""
+                    <div class="budget-item">
+                        <div class="budget-item-color" style="background: {colors[color_idx]};"></div>
+                        <div class="budget-item-content">
+                            <div class="budget-item-label">{formatted_key}</div>
+                            <div class="budget-item-value">{value}</div>
+                        </div>
+                        <div class="budget-item-percentage">
+                            {percentage}%
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Additional info
+            st.markdown("""
+            <div class="budget-info-card">
+                <div class="info-icon">💡</div>
+                <div class="info-content">
+                    <div class="info-title">Budget Tips</div>
+                    <div class="info-text">
+                        • 10-15% extra for unexpected expenses<br>
+                        • Book flights 6-8 weeks in advance<br>
+                        • Use local transportation for savings
+                    </div>
+                </div>
             </div>
             """, unsafe_allow_html=True)
-  
+            
+        st.markdown('</div>', unsafe_allow_html=True)
+    
     # Emergency Information
     emergency_info = itinerary_data.get("emergency_information", {})
     if emergency_info:
         st.markdown('<div class="section-title">⚕️ Emergency Information</div>', unsafe_allow_html=True)
-      
+        
         em_cols = st.columns(2)
-      
+        
         with em_cols[0]:
             st.warning(f"""
             **Emergency Contacts in Sri Lanka:**
@@ -3932,7 +3517,7 @@ if st.session_state.itinerary:
             - 🚑 Ambulance: {emergency_info.get('ambulance', '110')}
             - 🛡️ Tourist Police: {emergency_info.get('tourist_police', '1912')}
             """)
-      
+        
         with em_cols[1]:
             st.error(f"""
             **Important Information:**
@@ -3940,12 +3525,12 @@ if st.session_state.itinerary:
             - 🏛️ Embassy Contact: {emergency_info.get('embassy_contact', 'Contact your embassy in Colombo')}
             - ⚠️ Safety Tips: {summary.get('safety_tips', 'Stay vigilant in crowded areas')}
             """)
-  
+    
     # Download Section
     st.markdown('<div class="section-title">📥 Export Options</div>', unsafe_allow_html=True)
-  
+    
     col_dl1, col_dl2, col_dl3, col_dl4 = st.columns(4)
-  
+    
     with col_dl1:
         # JSON Download
         json_data = json.dumps(itinerary_data, indent=2, ensure_ascii=False)
@@ -3956,7 +3541,7 @@ if st.session_state.itinerary:
             mime="application/json",
             use_container_width=True
         )
-  
+    
     with col_dl2:
         # PDF-like text download
         daily_itinerary = itinerary_data.get("daily_itinerary", [])
@@ -4003,7 +3588,7 @@ Cost: {day.get('evening', {}).get('cost', 'N/A')}
 Accommodation: {day.get('accommodation_suggestion', 'N/A')}
 Food Recommendations: {', '.join(day.get('food_recommendations', []))}
 """
-      
+        
         text_content += f"""
 {'='*70}
 KEY ATTRACTIONS
@@ -4018,7 +3603,7 @@ KEY ATTRACTIONS
   Hours: {attraction.get('opening_hours', 'N/A')}
   Tips: {attraction.get('tips', 'N/A')}
 """
-      
+        
         st.download_button(
             label="📝 Detailed Guide (TXT)",
             data=text_content,
@@ -4026,7 +3611,7 @@ KEY ATTRACTIONS
             mime="text/plain",
             use_container_width=True
         )
-  
+    
     with col_dl3:
         # CSV Download
         csv_data = []
@@ -4045,7 +3630,7 @@ KEY ATTRACTIONS
                     "Duration": place["duration"],
                     "Description": place["description"][:150]
                 })
-      
+        
         if csv_data:
             df = pd.DataFrame(csv_data)
             csv_string = df.to_csv(index=False)
@@ -4056,7 +3641,7 @@ KEY ATTRACTIONS
                 mime="text/csv",
                 use_container_width=True
             )
-  
+    
     with col_dl4:
         if st.button("🔄 New Itinerary", use_container_width=True):
             st.session_state.itinerary = None
